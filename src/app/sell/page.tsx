@@ -15,8 +15,7 @@ export default function SellPage() {
   const router = useRouter();
   const { status } = useSession();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,27 +29,11 @@ export default function SellPage() {
       .then((d) => setCategories(d.categories ?? []));
   }, []);
 
-  const onUpload = async (file: File) => {
-    setUploading(true);
-    setError(null);
-    const fd = new FormData();
-    fd.append("file", file);
-    const r = await fetch("/api/upload", { method: "POST", body: fd });
-    setUploading(false);
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      setError(d.error ?? "Upload failed");
-      return;
-    }
-    const d = await r.json();
-    setImageUrl(d.url);
-  };
-
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    if (!imageUrl) {
-      setError("Please upload an image.");
+    if (!imageUrl.trim()) {
+      setError("Please paste an image URL.");
       return;
     }
     setSubmitting(true);
@@ -64,7 +47,7 @@ export default function SellPage() {
       startPrice: Number(fd.get("startPrice")),
       buyNowPrice: buyNowRaw ? Number(buyNowRaw) : null,
       durationHours: Number(fd.get("durationHours")),
-      imageUrl,
+      imageUrl: imageUrl.trim(),
     };
 
     const r = await fetch("/api/listings", {
@@ -87,28 +70,37 @@ export default function SellPage() {
       <Card>
         <CardHeader>
           <CardTitle>Create a listing</CardTitle>
-          <CardDescription>Auctions run for the duration you choose. Set a buy-it-now price to let buyers skip bidding.</CardDescription>
+          <CardDescription>
+            Auctions run for the duration you choose. Set a buy-it-now price to let buyers skip bidding.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="image">Photo</Label>
+              <Label htmlFor="imageUrl">Image URL</Label>
               <Input
-                id="image"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onUpload(f);
-                }}
-                disabled={uploading}
+                id="imageUrl"
+                type="url"
+                placeholder="https://images.unsplash.com/..."
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                required
               />
+              <p className="text-xs text-muted-foreground">
+                Paste a public URL to a JPG/PNG/WebP. (Tip: right-click any image online → &quot;Copy image address&quot;.)
+              </p>
               {imageUrl && (
                 <div className="relative mt-2 aspect-video w-full max-w-sm overflow-hidden rounded-md border">
-                  <Image src={imageUrl} alt="Preview" fill className="object-cover" sizes="384px" />
+                  <Image
+                    src={imageUrl}
+                    alt="Preview"
+                    fill
+                    className="object-cover"
+                    sizes="384px"
+                    onError={() => setError("Couldn't load that image URL.")}
+                  />
                 </div>
               )}
-              {uploading && <p className="text-xs text-muted-foreground">Uploading...</p>}
             </div>
 
             <div className="space-y-2">
@@ -181,7 +173,7 @@ export default function SellPage() {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={submitting || uploading}>
+            <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? "Creating..." : "List item"}
             </Button>
           </form>

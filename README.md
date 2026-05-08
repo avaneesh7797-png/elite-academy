@@ -5,7 +5,7 @@ A full-stack eBay-style marketplace where users can list items for sale, run tim
 ## Stack
 
 - **Next.js 14** (App Router) + **TypeScript**
-- **Prisma** + **SQLite** (drop-in replaceable with Postgres)
+- **Prisma** + **Postgres** (Vercel Postgres / Neon / Supabase / any Postgres)
 - **NextAuth.js** (email + password credentials, bcrypt)
 - **Tailwind CSS** + shadcn/ui-style components
 - **Zod** for input validation
@@ -14,7 +14,7 @@ A full-stack eBay-style marketplace where users can list items for sale, run tim
 ## Features
 
 - Email/password signup & login with hashed passwords
-- Create listings with image upload, category, condition, starting price, optional buy-it-now, configurable duration (1h–10d)
+- Create listings with image URL, category, condition, starting price, optional buy-it-now, configurable duration (1h–10d)
 - Auction detail page with **live bid polling (every 4s)**, countdown timer, bid history
 - Server-side bid validation: minimum-increment rule, no self-bids, no bids after expiry, atomic transaction
 - **Buy-it-now** instant purchase
@@ -25,16 +25,44 @@ A full-stack eBay-style marketplace where users can list items for sale, run tim
 - Seller profiles
 - Auction expiry: every read-path that surfaces listings calls `settleExpiredAuctions()` which closes ended listings, picks the winner, and creates win/sold/expired notifications
 
-## Getting started
+## Deploy to Vercel (one-click)
+
+This repo is preconfigured for Vercel + Vercel Postgres. From your phone or laptop:
+
+1. Open **https://vercel.com/new** and sign in with GitHub.
+2. Click **Import** on the `elite-academy` repo and pick the branch
+   `claude/marketplace-bidding-app-lNzTt`.
+3. On the project setup screen, click **Storage → Create → Postgres**. Vercel
+   will create a database and auto-inject `POSTGRES_PRISMA_URL` and
+   `POSTGRES_URL_NON_POOLING` env vars.
+4. Add two more env vars:
+   - `NEXTAUTH_SECRET` — any long random string (e.g. `openssl rand -base64 32`)
+   - `NEXTAUTH_URL` — leave blank for the first deploy, then set it to the
+     production URL Vercel gives you and redeploy
+5. Click **Deploy**. The build runs `prisma db push` (creates the schema) and
+   `prisma/seed.ts` (creates categories, demo users, and 8 sample listings).
+
+Once it's live you'll get a URL like `https://elite-academy.vercel.app`.
+
+### Demo accounts (seeded on first deploy)
+
+| Email | Password |
+|---|---|
+| `demo@elitebids.test` | `password123` |
+| `buyer@elitebids.test` | `password123` |
+
+## Local development
 
 ```bash
 npm install
-npx prisma db push        # creates dev.db
-npx tsx prisma/seed.ts    # categories + demo listings + demo users
+# Set POSTGRES_PRISMA_URL and POSTGRES_URL_NON_POOLING in .env (see .env.example).
+# Easiest local Postgres: https://neon.tech (free tier).
+npx prisma db push
+npx tsx prisma/seed.ts
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Open http://localhost:3000.
 
 ### Demo accounts
 
@@ -83,9 +111,8 @@ Auction expiry is lazy: any read path that surfaces listings calls `settleExpire
 
 ## Production hardening checklist
 
-- [ ] Replace SQLite with Postgres (just change `provider` and `DATABASE_URL`)
-- [ ] Move uploads from `/public/uploads` to S3 / Cloudinary
-- [ ] Add Stripe / payments for real money flow
+- [ ] Re-enable file uploads via S3 / Cloudinary (currently URL-paste only)
+- [ ] Add Stripe Connect for real money flow with platform fee
 - [ ] Add a cron worker for `settleExpiredAuctions()` instead of lazy settlement
 - [ ] Replace polling with WebSockets / Server-Sent Events for instant bid updates
 - [ ] Add rate limiting on `/api/signup` and `/api/listings/:id/bid`

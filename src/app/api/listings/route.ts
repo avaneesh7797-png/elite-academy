@@ -66,8 +66,8 @@ export async function GET(req: Request) {
   const where: Record<string, unknown> = { status: "ACTIVE" };
   if (q) {
     where.OR = [
-      { title: { contains: q } },
-      { description: { contains: q } },
+      { title: { contains: q, mode: "insensitive" } },
+      { description: { contains: q, mode: "insensitive" } },
     ];
   }
   if (category) where.category = { slug: category };
