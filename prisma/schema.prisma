@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  listings      Listing[] @relation("SellerListings")
+  bids          Bid[]
+  watches       Watch[]
+  notifications Notification[]
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  listings Listing[]
+}
+
+model Listing {
+  id            String    @id @default(cuid())
+  title         String
+  description   String
+  condition     String    @default("USED")
+  imageUrl      String
+  startPrice    Float
+  currentPrice  Float
+  buyNowPrice   Float?
+  endsAt        DateTime
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+
+  sellerId      String
+  seller        User      @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  categoryId    String
+  category      Category  @relation(fields: [categoryId], references: [id])
+
+  winnerId      String?
+
+  bids          Bid[]
+  watches       Watch[]
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([endsAt])
+}
+
+model Bid {
+  id        String   @id @default(cuid())
+  amount    Float
+  createdAt DateTime @default(now())
+
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  bidderId  String
+  bidder    User     @relation(fields: [bidderId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+}
+
+model Watch {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
