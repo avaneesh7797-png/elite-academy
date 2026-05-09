@@ -25,6 +25,18 @@ A full-stack eBay-style marketplace where users can list items for sale, run tim
 - Seller profiles
 - Auction expiry: every read-path that surfaces listings calls `settleExpiredAuctions()` which closes ended listings, picks the winner, and creates win/sold/expired notifications
 
+## Run on GitHub Codespaces (zero local setup, mobile-friendly)
+
+Best for trying the app without installing anything.
+
+1. Open the repo on GitHub.
+2. Tap **Code → Codespaces tab → Create codespace on `claude/marketplace-bidding-app-lNzTt`**.
+3. Wait ~3 minutes while the container builds, installs Postgres, seeds demo
+   data, and starts the dev server.
+4. When the port-forward toast appears (port 3000), tap **Open in Browser**.
+
+The codespace runs everything in your browser — works on a phone.
+
 ## Deploy to Vercel (one-click)
 
 This repo is preconfigured for Vercel + Vercel Postgres. From your phone or laptop:
