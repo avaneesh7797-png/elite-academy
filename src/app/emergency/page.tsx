@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { loadContacts, loadProfile, loadSettings } from "@/lib/emergency/storage";
 import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
+import { InstallCard } from "@/components/emergency/install-card";
 
 export default function EmergencyHome() {
   const [profileName, setProfileName] = useState("");
@@ -75,6 +76,8 @@ export default function EmergencyHome() {
         </div>
       </Link>
 
+      <InstallCard />
+
       {!status.isPremium && (
         <Link
           href="/emergency/upgrade"
@@ -85,9 +88,9 @@ export default function EmergencyHome() {
           </div>
           <div className="flex-1 text-sm">
             <div className="font-semibold">Unlock Premium</div>
-            <div className="text-xs text-zinc-400">Cloud sync · nearby hospitals & AEDs</div>
+            <div className="text-xs text-zinc-400">Cloud sync · Nearby help · Family circle</div>
           </div>
-          <span className="text-xs text-amber-300">From ₹49</span>
+          <span className="text-xs text-amber-300">₹2000 once</span>
         </Link>
       )}
 

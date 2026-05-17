@@ -7,6 +7,7 @@ import { Check, CheckCircle2, Crown, ExternalLink, Loader2 } from "lucide-react"
 import { BackBar } from "@/components/emergency/back-bar";
 import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
 import {
+  IS_LIFETIME,
   PAYU_PAYMENT_AMOUNT,
   PAYU_PAYMENT_LABEL,
   PAYU_PAYMENT_LINK,
@@ -120,7 +121,11 @@ function UpgradeInner() {
             <div className="font-semibold text-emerald-300">You&apos;re on Premium</div>
             <div className="mt-1 text-xs text-zinc-300">
               {status.plan ? `Plan: ${status.plan}.` : null}{" "}
-              {expiry ? `Renews / ends ${expiry.toLocaleDateString()}.` : null}
+              {IS_LIFETIME
+                ? "Lifetime access."
+                : expiry
+                  ? `Valid until ${expiry.toLocaleDateString()}.`
+                  : null}
             </div>
             <Link
               href="/emergency"
@@ -135,7 +140,9 @@ function UpgradeInner() {
               <div className="flex items-baseline justify-between">
                 <div>
                   <div className="font-semibold">{PAYU_PAYMENT_LABEL}</div>
-                  <div className="text-xs text-zinc-400">One-time payment via PayU</div>
+                  <div className="text-xs text-zinc-400">
+                    One-time payment &middot; no renewals
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xl font-bold">₹{PAYU_PAYMENT_AMOUNT}</div>
@@ -215,8 +222,8 @@ function UpgradeInner() {
             )}
 
             <p className="text-center text-[11px] leading-relaxed text-zinc-500">
-              Payments are processed by PayU. Your Premium activates after the merchant confirms the
-              transaction (usually within a few hours).
+              Payments are processed by PayU. One-time charge &mdash; nothing renews.
+              Premium activates after the merchant confirms the transaction (usually within a few hours).
             </p>
           </div>
         )}

@@ -6,6 +6,7 @@ import { signIn, signOut } from "next-auth/react";
 import { CheckCircle2, CloudDownload, CloudUpload, Crown, Loader2, LogOut, User as UserIcon } from "lucide-react";
 import { BackBar } from "@/components/emergency/back-bar";
 import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
+import { IS_LIFETIME } from "@/lib/emergency/payu-link";
 import {
   EMPTY_PROFILE,
   loadContacts,
@@ -161,9 +162,13 @@ export default function AccountPage() {
                     {status.isPremium ? "Premium" : "Free plan"}
                   </div>
                   <div className="mt-0.5 text-xs text-zinc-300">
-                    {status.isPremium && expiry
-                      ? `Renews / ends ${expiry.toLocaleDateString()}`
-                      : "Unlock cloud sync and nearby help."}
+                    {status.isPremium
+                      ? IS_LIFETIME
+                        ? "Lifetime access"
+                        : expiry
+                          ? `Valid until ${expiry.toLocaleDateString()}`
+                          : "Active"
+                      : "Unlock cloud sync, nearby help, and family circle."}
                   </div>
                   {!status.isPremium && (
                     <Link
