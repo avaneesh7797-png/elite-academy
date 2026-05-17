@@ -16,10 +16,81 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
-  listings      Listing[] @relation("SellerListings")
-  bids          Bid[]
-  watches       Watch[]
-  notifications Notification[]
+  listings           Listing[] @relation("SellerListings")
+  bids               Bid[]
+  watches            Watch[]
+  notifications      Notification[]
+  emergencyContacts  EmergencyContact[]
+  medicalProfile     MedicalProfile?
+  emergencySettings  EmergencySettings?
+  subscriptions      Subscription[]
+}
+
+model EmergencyContact {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String
+  relationship String   @default("")
+  position     Int      @default(0)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@index([userId, position])
+}
+
+model MedicalProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String   @default("")
+  dob             String   @default("")
+  bloodType       String   @default("")
+  weight          String   @default("")
+  height          String   @default("")
+  allergies       String   @default("")
+  conditions      String   @default("")
+  medications     String   @default("")
+  doctorName      String   @default("")
+  doctorPhone     String   @default("")
+  insurance       String   @default("")
+  iceName         String   @default("")
+  iceRelationship String   @default("")
+  icePhone        String   @default("")
+  notes           String   @default("")
+  updatedAt       DateTime @updatedAt
+}
+
+model EmergencySettings {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicalNumber  String   @default("911")
+  fireNumber     String   @default("911")
+  policeNumber   String   @default("911")
+  country        String   @default("US")
+  shareLocation  Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}
+
+model Subscription {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               String
+  status             String   @default("pending")
+  payuTxnId          String   @unique
+  payuPaymentId      String?
+  amount             Float
+  currency           String   @default("INR")
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, currentPeriodEnd])
 }
 
 model Category {

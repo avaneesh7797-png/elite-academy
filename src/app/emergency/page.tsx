@@ -4,18 +4,23 @@ import Link from "next/link";
 import {
   AlertTriangle,
   BookOpen,
+  Crown,
   HeartPulse,
+  MapPin,
   Settings as SettingsIcon,
   ShieldAlert,
+  User as UserIcon,
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { loadContacts, loadProfile, loadSettings } from "@/lib/emergency/storage";
+import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
 
 export default function EmergencyHome() {
   const [profileName, setProfileName] = useState("");
   const [contactsCount, setContactsCount] = useState(0);
   const [medicalNumber, setMedicalNumber] = useState("911");
+  const { status } = useEmergencyStatus();
 
   useEffect(() => {
     const p = loadProfile();
@@ -31,13 +36,27 @@ export default function EmergencyHome() {
           <h1 className="text-2xl font-bold">Emergency</h1>
           <p className="text-sm text-zinc-400">One-tap help when seconds count.</p>
         </div>
-        <Link
-          href="/emergency/settings"
-          aria-label="Settings"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-        >
-          <SettingsIcon className="h-5 w-5" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/emergency/account"
+            aria-label="Account"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+          >
+            <UserIcon className="h-5 w-5" />
+            {status.isPremium && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-zinc-950">
+                <Crown className="h-2.5 w-2.5" />
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/emergency/settings"
+            aria-label="Settings"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+          >
+            <SettingsIcon className="h-5 w-5" />
+          </Link>
+        </div>
       </div>
 
       <Link
@@ -54,6 +73,22 @@ export default function EmergencyHome() {
           </div>
         </div>
       </Link>
+
+      {!status.isPremium && (
+        <Link
+          href="/emergency/upgrade"
+          className="mt-3 flex items-center gap-3 rounded-xl border border-amber-700/40 bg-gradient-to-br from-amber-900/30 to-zinc-900 p-3 active:scale-[0.99]"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/20 text-amber-300">
+            <Crown className="h-4 w-4" />
+          </div>
+          <div className="flex-1 text-sm">
+            <div className="font-semibold">Unlock Premium</div>
+            <div className="text-xs text-zinc-400">Cloud sync · nearby hospitals & AEDs</div>
+          </div>
+          <span className="text-xs text-amber-300">From ₹49</span>
+        </Link>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <DashCard
@@ -78,11 +113,26 @@ export default function EmergencyHome() {
           accent="bg-emerald-600/15 text-emerald-300"
         />
         <DashCard
+          href="/emergency/nearby"
+          icon={<MapPin className="h-6 w-6" />}
+          title="Nearby Help"
+          subtitle={status.isPremium ? "Hospitals & AEDs" : "Premium"}
+          accent="bg-amber-600/15 text-amber-300"
+          locked={!status.isPremium}
+        />
+        <DashCard
           href="/emergency/settings"
           icon={<ShieldAlert className="h-6 w-6" />}
           title="Emergency #s"
           subtitle={`Medical: ${medicalNumber}`}
-          accent="bg-amber-600/15 text-amber-300"
+          accent="bg-orange-600/15 text-orange-300"
+        />
+        <DashCard
+          href="/emergency/account"
+          icon={<UserIcon className="h-6 w-6" />}
+          title="Account"
+          subtitle={status.user ? status.user.name : "Sign in / Sign up"}
+          accent="bg-violet-600/15 text-violet-300"
         />
       </div>
 
@@ -100,17 +150,19 @@ function DashCard({
   title,
   subtitle,
   accent,
+  locked,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   subtitle: string;
   accent: string;
+  locked?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 active:scale-[0.98]"
+      className="relative flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 active:scale-[0.98]"
     >
       <div className={`flex h-10 w-10 items-center justify-center rounded-full ${accent}`}>
         {icon}
@@ -119,6 +171,11 @@ function DashCard({
         <div className="font-semibold">{title}</div>
         <div className="mt-0.5 line-clamp-1 text-xs text-zinc-400">{subtitle}</div>
       </div>
+      {locked && (
+        <span className="absolute right-3 top-3 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">
+          Pro
+        </span>
+      )}
     </Link>
   );
 }
