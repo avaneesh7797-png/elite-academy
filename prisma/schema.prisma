@@ -24,6 +24,10 @@ model User {
   medicalProfile     MedicalProfile?
   emergencySettings  EmergencySettings?
   subscriptions      Subscription[]
+  ownedFamilies      Family[]           @relation("OwnedFamilies")
+  familyMemberships  FamilyMember[]
+  memberLocations    MemberLocation[]
+  familyAlerts       FamilyAlert[]
 }
 
 model EmergencyContact {
@@ -91,6 +95,63 @@ model Subscription {
 
   @@index([userId, status])
   @@index([userId, currentPeriodEnd])
+}
+
+model Family {
+  id         String   @id @default(cuid())
+  name       String   @default("My Circle")
+  ownerId    String
+  owner      User     @relation("OwnedFamilies", fields: [ownerId], references: [id], onDelete: Cascade)
+  inviteCode String   @unique
+  createdAt  DateTime @default(now())
+
+  members   FamilyMember[]
+  locations MemberLocation[]
+  alerts    FamilyAlert[]
+}
+
+model FamilyMember {
+  id        String   @id @default(cuid())
+  familyId  String
+  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member")
+  nickname  String   @default("")
+  joinedAt  DateTime @default(now())
+
+  @@unique([familyId, userId])
+  @@index([userId])
+}
+
+model MemberLocation {
+  id        String   @id @default(cuid())
+  familyId  String
+  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lat       Float
+  lon       Float
+  accuracy  Float?
+  updatedAt DateTime @updatedAt
+
+  @@unique([familyId, userId])
+}
+
+model FamilyAlert {
+  id             String    @id @default(cuid())
+  familyId       String
+  family         Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String    @default("sos")
+  message        String    @default("")
+  lat            Float?
+  lon            Float?
+  createdAt      DateTime  @default(now())
+  acknowledgedAt DateTime?
+
+  @@index([familyId, createdAt])
 }
 
 model Category {

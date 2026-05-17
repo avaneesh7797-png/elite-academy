@@ -46,6 +46,23 @@ export default function SosPage() {
     );
   }, [activated, settings?.shareLocation]);
 
+  useEffect(() => {
+    if (!activated || !type) return;
+    const t = setTimeout(() => {
+      fetch("/api/emergency/family/alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "sos",
+          message: labelFor(type),
+          lat: location?.lat ?? null,
+          lon: location?.lon ?? null,
+        }),
+      }).catch(() => {});
+    }, location ? 0 : 5000);
+    return () => clearTimeout(t);
+  }, [activated, type, location]);
+
   const dial = (number: string) => {
     window.location.href = `tel:${number.replace(/\s+/g, "")}`;
   };

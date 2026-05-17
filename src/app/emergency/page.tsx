@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   User as UserIcon,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { loadContacts, loadProfile, loadSettings } from "@/lib/emergency/storage";
@@ -118,6 +119,14 @@ export default function EmergencyHome() {
           title="Nearby Help"
           subtitle={status.isPremium ? "Hospitals & AEDs" : "Premium"}
           accent="bg-amber-600/15 text-amber-300"
+          locked={!status.isPremium}
+        />
+        <DashCard
+          href="/emergency/family"
+          icon={<UsersRound className="h-6 w-6" />}
+          title="Family Circle"
+          subtitle={status.isPremium ? "Share location" : "Premium"}
+          accent="bg-cyan-600/15 text-cyan-300"
           locked={!status.isPremium}
         />
         <DashCard
