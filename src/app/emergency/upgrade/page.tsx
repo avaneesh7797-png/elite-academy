@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Check, CheckCircle2, Crown, ExternalLink, Loader2 } from "lucide-react";
 import { BackBar } from "@/components/emergency/back-bar";
 import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
+import { useTwaMode } from "@/lib/emergency/use-twa";
 import {
   IS_LIFETIME,
   PAYU_PAYMENT_AMOUNT,
@@ -37,6 +38,7 @@ function UpgradeInner() {
   const params = useSearchParams();
   const initialBanner = statusBanner(params.get("status"));
   const { status, loading, refresh } = useEmergencyStatus();
+  const { isTwa } = useTwaMode();
   const [banner, setBanner] = useState(initialBanner);
   const [showConfirm, setShowConfirm] = useState(false);
   const [txnid, setTxnid] = useState("");
@@ -124,7 +126,15 @@ function UpgradeInner() {
           </ul>
         </div>
 
-        {status.isPremium ? (
+        {isTwa && !status.isPremium ? (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
+            <div className="font-semibold">Manage Premium on the web</div>
+            <p className="mt-1 text-xs text-zinc-400">
+              Premium is available only through the website. Sign in here with the same email
+              after you&apos;ve upgraded on the web and your access will apply automatically.
+            </p>
+          </div>
+        ) : status.isPremium ? (
           <div className="rounded-2xl border border-emerald-700/40 bg-emerald-900/20 p-4">
             <div className="font-semibold text-emerald-300">You&apos;re on Premium</div>
             <div className="mt-1 text-xs text-zinc-300">

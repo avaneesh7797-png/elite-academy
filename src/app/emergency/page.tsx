@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { loadContacts, loadProfile, loadSettings } from "@/lib/emergency/storage";
 import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
+import { useTwaMode } from "@/lib/emergency/use-twa";
 import { InstallCard } from "@/components/emergency/install-card";
 
 export default function EmergencyHome() {
@@ -23,6 +24,7 @@ export default function EmergencyHome() {
   const [contactsCount, setContactsCount] = useState(0);
   const [medicalNumber, setMedicalNumber] = useState("911");
   const { status } = useEmergencyStatus();
+  const { isTwa } = useTwaMode();
 
   useEffect(() => {
     const p = loadProfile();
@@ -78,7 +80,7 @@ export default function EmergencyHome() {
 
       <InstallCard />
 
-      {!status.isPremium && (
+      {!status.isPremium && !isTwa && (
         <Link
           href="/emergency/upgrade"
           className="mt-3 flex items-center gap-3 rounded-xl border border-amber-700/40 bg-gradient-to-br from-amber-900/30 to-zinc-900 p-3 active:scale-[0.99]"
