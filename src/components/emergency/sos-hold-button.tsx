@@ -80,21 +80,19 @@ export function SosHoldButton({ label, sublabel, color, onActivate, disabled }: 
   return (
     <button
       type="button"
-      onMouseDown={start}
-      onMouseUp={cancel}
-      onMouseLeave={cancel}
-      onTouchStart={(e) => {
-        e.preventDefault();
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
         start();
       }}
-      onTouchEnd={cancel}
-      onTouchCancel={cancel}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onPointerLeave={cancel}
       onContextMenu={(e) => e.preventDefault()}
       disabled={disabled}
       className={`relative flex h-64 w-64 select-none items-center justify-center rounded-full border-4 text-white shadow-2xl transition-transform active:scale-95 disabled:opacity-50 ${
         progress > 0 ? c.active : c.base
       }`}
-      style={{ touchAction: "none" }}
+      style={{ touchAction: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
     >
       <svg
         className="pointer-events-none absolute inset-0 -rotate-90"

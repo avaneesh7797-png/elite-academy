@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { MapPin, Phone } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Crosshair, MapPin, Phone } from "lucide-react";
 import { BackBar } from "@/components/emergency/back-bar";
 import { SosHoldButton } from "@/components/emergency/sos-hold-button";
 import {
+  DEFAULT_SETTINGS,
+  EmergencySettings,
   EmergencyType,
   TrustedContact,
   labelFor,
@@ -12,27 +14,35 @@ import {
   loadSettings,
   numberFor,
 } from "@/lib/emergency/storage";
+import { useEmergencyStatus } from "@/lib/emergency/use-emergency-status";
 
 type Location = { lat: number; lon: number; accuracy: number };
 
 export default function SosPage() {
+  const [ready, setReady] = useState(false);
   const [type, setType] = useState<EmergencyType | null>(null);
   const [activated, setActivated] = useState(false);
   const [location, setLocation] = useState<Location | null>(null);
   const [locError, setLocError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
-  const settings = useMemo(() => (typeof window !== "undefined" ? loadSettings() : null), [activated]);
+  const [settings, setSettings] = useState<EmergencySettings>(DEFAULT_SETTINGS);
+  const { status } = useEmergencyStatus();
+
+  const alertSentNoLocRef = useRef(false);
+  const alertSentWithLocRef = useRef(false);
 
   useEffect(() => {
     setContacts(loadContacts());
+    setSettings(loadSettings());
+    setReady(true);
   }, []);
 
-  useEffect(() => {
-    if (!activated || !settings?.shareLocation) return;
+  const fetchLocation = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLocError("Location not available on this device");
       return;
     }
+    setLocError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocation({
@@ -41,40 +51,70 @@ export default function SosPage() {
           accuracy: pos.coords.accuracy,
         });
       },
-      (err) => setLocError(err.message),
+      (err) => setLocError(err.message || "Could not get location"),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
-  }, [activated, settings?.shareLocation]);
+  }, []);
+
+  useEffect(() => {
+    if (!activated || !settings.shareLocation) return;
+    fetchLocation();
+  }, [activated, settings.shareLocation, fetchLocation]);
 
   useEffect(() => {
     if (!activated || !type) return;
-    const t = setTimeout(() => {
+    if (!status.isPremium) return;
+    if (alertSentWithLocRef.current) return;
+
+    if (location) {
+      alertSentWithLocRef.current = true;
       fetch("/api/emergency/family/alert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "sos",
           message: labelFor(type),
-          lat: location?.lat ?? null,
-          lon: location?.lon ?? null,
+          lat: location.lat,
+          lon: location.lon,
         }),
       }).catch(() => {});
-    }, location ? 0 : 5000);
+      return;
+    }
+
+    if (alertSentNoLocRef.current) return;
+    const t = setTimeout(() => {
+      if (location) return;
+      alertSentNoLocRef.current = true;
+      fetch("/api/emergency/family/alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "sos", message: labelFor(type) }),
+      }).catch(() => {});
+    }, 5000);
     return () => clearTimeout(t);
-  }, [activated, type, location]);
+  }, [activated, type, location, status.isPremium]);
 
   const dial = (number: string) => {
     window.location.href = `tel:${number.replace(/\s+/g, "")}`;
   };
 
   const onActivate = (t: EmergencyType) => {
-    if (!settings) return;
+    if (!ready) return;
     setType(t);
     setActivated(true);
     dial(numberFor(t, settings));
   };
 
-  if (activated && type && settings) {
+  const reset = () => {
+    setActivated(false);
+    setType(null);
+    setLocation(null);
+    setLocError(null);
+    alertSentNoLocRef.current = false;
+    alertSentWithLocRef.current = false;
+  };
+
+  if (activated && type) {
     const number = numberFor(type, settings);
     const firstContact = contacts[0];
     const mapsUrl = location
@@ -104,24 +144,32 @@ export default function SosPage() {
           </div>
 
           <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="flex items-center gap-2 text-sm text-zinc-300">
-              <MapPin className="h-4 w-4" />
-              {location ? (
-                <span>
-                  Location ready · accuracy ~{Math.round(location.accuracy)}m
-                </span>
-              ) : locError ? (
-                <span className="text-amber-400">{locError}</span>
-              ) : settings.shareLocation ? (
-                <span>Getting your location…</span>
-              ) : (
-                <span>Location sharing off</span>
+            <div className="flex items-center justify-between gap-2 text-sm text-zinc-300">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                {location ? (
+                  <span>Location ready · accuracy ~{Math.round(location.accuracy)}m</span>
+                ) : locError ? (
+                  <span className="text-amber-400">{locError}</span>
+                ) : settings.shareLocation ? (
+                  <span>Getting your location…</span>
+                ) : (
+                  <span>Location sharing off</span>
+                )}
+              </div>
+              {settings.shareLocation && (
+                <button
+                  onClick={fetchLocation}
+                  aria-label="Retry location"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                >
+                  <Crosshair className="h-4 w-4" />
+                </button>
               )}
             </div>
             {mapsUrl && (
               <a
                 href={mapsUrl}
-                target="_blank"
                 rel="noreferrer"
                 className="mt-2 block truncate text-xs text-blue-400 underline"
               >
@@ -166,12 +214,7 @@ export default function SosPage() {
           </div>
 
           <button
-            onClick={() => {
-              setActivated(false);
-              setType(null);
-              setLocation(null);
-              setLocError(null);
-            }}
+            onClick={reset}
             className="mt-6 w-full rounded-xl border border-zinc-700 py-3 text-sm text-zinc-300 active:bg-zinc-800"
           >
             Done
@@ -193,18 +236,21 @@ export default function SosPage() {
             label="Medical"
             sublabel="Injury, illness, unconscious"
             color="red"
+            disabled={!ready}
             onActivate={() => onActivate("medical")}
           />
           <SosHoldButton
             label="Fire"
             sublabel="Fire, smoke, accident"
             color="orange"
+            disabled={!ready}
             onActivate={() => onActivate("fire")}
           />
           <SosHoldButton
             label="Police"
             sublabel="Personal safety, crime"
             color="blue"
+            disabled={!ready}
             onActivate={() => onActivate("police")}
           />
         </div>

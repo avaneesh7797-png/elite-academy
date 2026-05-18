@@ -66,11 +66,11 @@ export default function ContactsPage() {
               key={c.id}
               className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3"
             >
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-1">
                 <button
                   onClick={() => move(c.id, -1)}
                   disabled={i === 0}
-                  className="px-2 text-zinc-500 disabled:opacity-30"
+                  className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-400 disabled:opacity-30"
                   aria-label="Move up"
                 >
                   ▲
@@ -78,7 +78,7 @@ export default function ContactsPage() {
                 <button
                   onClick={() => move(c.id, 1)}
                   disabled={i === contacts.length - 1}
-                  className="px-2 text-zinc-500 disabled:opacity-30"
+                  className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-400 disabled:opacity-30"
                   aria-label="Move down"
                 >
                   ▼
@@ -129,7 +129,7 @@ export default function ContactsPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Name"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-red-500 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600 focus:border-red-500 focus:outline-none"
             required
           />
           <input
@@ -137,14 +137,14 @@ export default function ContactsPage() {
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Phone (with country code)"
             type="tel"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-red-500 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600 focus:border-red-500 focus:outline-none"
             required
           />
           <input
             value={relationship}
             onChange={(e) => setRelationship(e.target.value)}
             placeholder="Relationship (optional)"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-red-500 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600 focus:border-red-500 focus:outline-none"
           />
           <button
             type="submit"

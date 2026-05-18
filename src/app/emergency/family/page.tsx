@@ -63,6 +63,8 @@ export default function FamilyPage() {
   const [showLeave, setShowLeave] = useState(false);
   const lastLocationPost = useRef(0);
 
+  const [locationDenied, setLocationDenied] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
       const r = await fetch("/api/emergency/family", { cache: "no-store" });
@@ -81,13 +83,34 @@ export default function FamilyPage() {
       return;
     }
     refresh();
-    const i = setInterval(refresh, POLL_MS);
-    return () => clearInterval(i);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(refresh, POLL_MS);
+    };
+    const stop = () => {
+      if (interval) clearInterval(interval);
+      interval = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") stop();
+      else {
+        refresh();
+        start();
+      }
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [status.isPremium, refresh]);
 
+  const familyId = family?.id ?? null;
+
   useEffect(() => {
-    if (!family || !("geolocation" in navigator)) return;
-    let watchId: number | null = null;
+    if (!familyId || typeof navigator === "undefined" || !("geolocation" in navigator)) return;
     const postIfDue = (pos: GeolocationPosition) => {
       const now = Date.now();
       if (now - lastLocationPost.current < LOCATION_POST_MS) return;
@@ -102,15 +125,16 @@ export default function FamilyPage() {
         }),
       }).catch(() => {});
     };
-    watchId = navigator.geolocation.watchPosition(
-      postIfDue,
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
-    );
-    return () => {
-      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    const onErr = (err: GeolocationPositionError) => {
+      if (err.code === err.PERMISSION_DENIED) setLocationDenied(true);
     };
-  }, [family]);
+    const watchId = navigator.geolocation.watchPosition(postIfDue, onErr, {
+      enableHighAccuracy: true,
+      maximumAge: 15000,
+      timeout: 20000,
+    });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [familyId]);
 
   const createCircle = async () => {
     setError(null);
@@ -247,6 +271,12 @@ export default function FamilyPage() {
     <>
       <BackBar title="Family Circle" />
       <div className="px-4 py-5 space-y-4">
+        {locationDenied && (
+          <div className="rounded-xl border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-sm text-amber-300">
+            Location permission is blocked. The other members won&apos;t see where you are until you re-enable it
+            in your browser settings.
+          </div>
+        )}
         {activeAlerts.length > 0 && (
           <div className="space-y-2">
             {activeAlerts.map((a) => (
@@ -395,7 +425,10 @@ function NoFamilyView({
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="ABC123"
             maxLength={8}
-            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono uppercase tracking-widest text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono uppercase tracking-widest text-base text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
           />
           <button
             type="submit"
@@ -459,7 +492,6 @@ function MemberRow({
       {dirUrl && (
         <a
           href={dirUrl}
-          target="_blank"
           rel="noopener"
           aria-label="Directions"
           className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white"
@@ -510,7 +542,6 @@ function AlertCard({ alert, onAck }: { alert: Alert; onAck: () => void }) {
           {dirUrl && (
             <a
               href={dirUrl}
-              target="_blank"
               rel="noopener"
               className="mt-2 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
             >

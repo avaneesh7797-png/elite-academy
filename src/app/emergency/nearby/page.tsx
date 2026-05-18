@@ -190,7 +190,6 @@ export default function NearbyPage() {
                 )}
                 <a
                   href={dirUrl}
-                  target="_blank"
                   rel="noopener"
                   aria-label="Directions"
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white"

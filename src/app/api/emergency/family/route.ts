@@ -12,6 +12,7 @@ const RECENT_ALERTS_MS = 24 * 60 * 60 * 1000;
 export async function GET() {
   const { userId, isPremium } = await getPremiumStatus();
   if (!userId) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (!isPremium) return NextResponse.json({ isPremium: false, family: null });
 
   const membership = await prisma.familyMember.findFirst({
     where: { userId },
@@ -96,21 +97,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
-  const existing = await prisma.familyMember.findFirst({ where: { userId } });
-  if (existing) {
-    return NextResponse.json({ error: "You're already in a family circle." }, { status: 409 });
+  try {
+    const family = await prisma.$transaction(async (tx) => {
+      const existing = await tx.familyMember.findFirst({ where: { userId } });
+      if (existing) throw new Error("ALREADY_IN_FAMILY");
+      return tx.family.create({
+        data: {
+          name: parsed.data.name,
+          ownerId: userId,
+          inviteCode: generateInviteCode(),
+          members: { create: { userId, role: "owner" } },
+        },
+      });
+    });
+    return NextResponse.json({ ok: true, familyId: family.id, inviteCode: family.inviteCode });
+  } catch (e) {
+    if (e instanceof Error && e.message === "ALREADY_IN_FAMILY") {
+      return NextResponse.json({ error: "You're already in a family circle." }, { status: 409 });
+    }
+    throw e;
   }
-
-  const family = await prisma.family.create({
-    data: {
-      name: parsed.data.name,
-      ownerId: userId,
-      inviteCode: generateInviteCode(),
-      members: { create: { userId, role: "owner" } },
-    },
-  });
-
-  return NextResponse.json({ ok: true, familyId: family.id, inviteCode: family.inviteCode });
 }
 
 export async function DELETE() {

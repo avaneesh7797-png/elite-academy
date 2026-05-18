@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PLANS, getPayuConfig, verifyResponseHash } from "@/lib/emergency/payu";
+import { PAYU_PAYMENT_PERIOD_DAYS } from "@/lib/emergency/payu-link";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +32,10 @@ export async function POST(req: Request) {
   }
 
   if (status === "success") {
-    const planConfig = PLANS[sub.plan as keyof typeof PLANS] ?? PLANS.monthly;
+    const planConfig = PLANS[sub.plan as keyof typeof PLANS];
+    const periodDays = planConfig?.periodDays ?? PAYU_PAYMENT_PERIOD_DAYS;
     const start = new Date();
-    const end = new Date(start.getTime() + planConfig.periodDays * 24 * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + periodDays * 24 * 60 * 60 * 1000);
     await prisma.subscription.update({
       where: { id: sub.id },
       data: {

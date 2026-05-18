@@ -54,7 +54,15 @@ function UpgradeInner() {
       return;
     }
     setShowConfirm(true);
-    window.open(PAYU_PAYMENT_LINK, "_blank", "noopener");
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (standalone) {
+      window.location.href = PAYU_PAYMENT_LINK;
+    } else {
+      const w = window.open(PAYU_PAYMENT_LINK, "_blank", "noopener");
+      if (!w) window.location.href = PAYU_PAYMENT_LINK;
+    }
   };
 
   const confirmPayment = async (e: React.FormEvent) => {
@@ -187,7 +195,9 @@ function UpgradeInner() {
                   value={txnid}
                   onChange={(e) => setTxnid(e.target.value)}
                   placeholder="PayU Transaction ID"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
                 />
                 {error && <p className="text-sm text-red-400">{error}</p>}
                 <div className="flex gap-2">
@@ -206,14 +216,13 @@ function UpgradeInner() {
                     Cancel
                   </button>
                 </div>
-                <a
-                  href={PAYU_PAYMENT_LINK}
-                  target="_blank"
-                  rel="noopener"
-                  className="block text-center text-xs text-amber-300 underline"
+                <button
+                  type="button"
+                  onClick={goToPayU}
+                  className="block w-full text-center text-xs text-amber-300 underline"
                 >
                   Re-open PayU payment page
-                </a>
+                </button>
               </form>
             )}
 
