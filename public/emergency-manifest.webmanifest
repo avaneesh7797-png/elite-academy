@@ -1,0 +1,37 @@
+{
+  "name": "Emergency",
+  "short_name": "Emergency",
+  "description": "One-tap emergency help — SOS, Medical ID, first aid, trusted contacts.",
+  "start_url": "/emergency",
+  "scope": "/emergency/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "/emergency-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/emergency-icon/192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/emergency-icon/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/emergency-icon/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
