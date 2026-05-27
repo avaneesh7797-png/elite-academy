@@ -28,6 +28,8 @@ model User {
   familyMemberships  FamilyMember[]
   memberLocations    MemberLocation[]
   familyAlerts       FamilyAlert[]
+  ownedBusinesses    Business[]              @relation("OwnedBusinesses")
+  applications       MembershipApplication[]
 }
 
 model EmergencyContact {
@@ -229,4 +231,89 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read])
+}
+
+// ============================================================================
+// Activity marketplace (gyms, yoga, sports clubs, etc.)
+// Owners pay ₹7000 one-time, get a public page at /g/<slug>.
+// ============================================================================
+
+model Business {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         User     @relation("OwnedBusinesses", fields: [ownerId], references: [id], onDelete: Cascade)
+  slug          String   @unique
+  name          String
+  category      String   @default("Gym")
+  tagline       String   @default("")
+  description   String   @default("")
+  address       String   @default("")
+  city          String   @default("")
+  phone         String   @default("")
+  whatsapp      String   @default("")
+  email         String   @default("")
+  heroImage     String   @default("")
+  gallery       String   @default("") // JSON array of urls
+  hours         String   @default("") // JSON string
+  amenities     String   @default("") // JSON array of strings
+  themeColor    String   @default("emerald")
+  chatGreeting  String   @default("Hi! Ask me about plans, hours, or facilities.")
+  status        String   @default("pending") // pending | active | suspended
+  payuTxnId     String?  @unique
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  plans         BusinessPlan[]
+  faqs          BusinessFAQ[]
+  applications  MembershipApplication[]
+
+  @@index([status, category])
+  @@index([city])
+}
+
+model BusinessPlan {
+  id           String   @id @default(cuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name         String
+  description  String   @default("")
+  priceInr     Int
+  durationDays Int      @default(30)
+  position     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  applications MembershipApplication[]
+
+  @@index([businessId, position])
+}
+
+model BusinessFAQ {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  question   String
+  answer     String
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, position])
+}
+
+model MembershipApplication {
+  id          String        @id @default(cuid())
+  businessId  String
+  business    Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  planId      String?
+  plan        BusinessPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name        String
+  email       String
+  phone       String        @default("")
+  message     String        @default("")
+  status      String        @default("new") // new | contacted | accepted | declined
+  createdAt   DateTime      @default(now())
+
+  @@index([businessId, status, createdAt])
 }
