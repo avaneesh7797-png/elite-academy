@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What lives here
 
-This repo holds two unrelated apps in a single Next.js codebase:
+This repo holds three unrelated apps in a single Next.js codebase:
 
 1. **EliteBids marketplace** (`/`, `/listing`, `/sell`, `/watchlist`, `/account`, `/notifications`, `/seller`, `/api/*`) — auction marketplace. Requires Postgres (`POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`) and NextAuth (`NEXTAUTH_SECRET`). See `README.md`.
 2. **Emergency app** (`/emergency/*`) — installable PWA for emergencies. No backend, no auth — all data lives in `localStorage`. Works offline via service worker. Designed for mobile.
+3. **FitSpot activities marketplace** (`/marketplace/*`, `/g/[slug]`, `/api/marketplace/*`) — gym / yoga / sports business directory. Owners pay ₹7,000 one-time via PayU, get a customisable public page at `/g/<slug>` with plans, FAQ, contact, custom chatbot, and a membership-application form. Uses the same Postgres + NextAuth as EliteBids.
 
-The two apps share the Next.js project, Tailwind theme, and `lib/utils.ts`, but the Emergency app does not depend on Prisma / NextAuth / the marketplace.
+The three apps share the Next.js project, Tailwind theme, NextAuth user table, and `lib/utils.ts`. Emergency does not depend on Prisma/NextAuth; FitSpot and EliteBids both do.
 
 ## Stack
 
@@ -59,6 +60,43 @@ public/
   emergency-sw.js                 # Cache-first service worker for the app shell
   emergency-icon.svg              # App icon
 ```
+
+## FitSpot app layout
+
+```
+src/app/marketplace/         # platform pages — browse, register, owner dashboard
+  layout.tsx                 # FitSpot chrome (its own header/footer)
+  page.tsx                   # public browse, hero, "how it works"
+  register/page.tsx          # owner sign-up → creates Business in pending state
+  dashboard/page.tsx         # owner's list of businesses
+  dashboard/[id]/page.tsx    # editor (profile, plans, design+chatbot, leads)
+
+src/app/g/[slug]/page.tsx    # public business page (no FitSpot chrome — looks like the business's own site)
+
+src/app/api/marketplace/
+  businesses/                # CRUD for owner's businesses
+  businesses/[id]/confirm    # POST PayU txn ID → activates listing
+  businesses/[id]/plans/     # plans CRUD
+  businesses/[id]/faqs/      # FAQ CRUD (drives chatbot)
+  businesses/[id]/applications/[appId]  # PATCH application status
+  public/                    # public browse API
+  public/[slug]/             # GET active business detail
+  public/[slug]/apply        # POST membership application
+  public/[slug]/chat         # POST chat message → custom chatbot reply
+  slug-check                 # availability check during registration
+
+src/lib/marketplace/
+  payu-link.ts               # ₹7,000 PayU link + amount
+  types.ts                   # categories, theme colours, slugify, parseJsonArray
+  chatbot.ts                 # rule-based per-business assistant (FAQs + structured fields)
+
+src/components/marketplace/  # marketplace-chrome, browse-filters, register-form,
+                             # dashboard-editor (tabs), public-business-page (hero/plans/chat)
+```
+
+Site chrome routing: `src/components/site-chrome.tsx` skips the EliteBids header/footer for `/emergency/*`, `/marketplace/*`, and `/g/*` so each app feels standalone.
+
+PayU link: `NEXT_PUBLIC_MARKETPLACE_PAYU_LINK` (default `https://u.payu.in/QIflja9WMldm`). Activation flow is owner-submitted: they open PayU in a new tab, paste the Transaction ID back, and the listing flips to `active` immediately.
 
 ## Branch convention
 

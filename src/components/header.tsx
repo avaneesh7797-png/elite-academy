@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
-import { AlertTriangle, Bell, Heart, Plus, Search, ShoppingBag, User } from "lucide-react";
+import { AlertTriangle, Bell, Dumbbell, Heart, Plus, Search, ShoppingBag, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,17 @@ export function Header() {
         </form>
 
         <nav className="flex items-center gap-1">
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            aria-label="FitSpot — activities marketplace"
+            title="FitSpot"
+          >
+            <Link href="/marketplace">
+              <Dumbbell className="h-5 w-5 text-emerald-600" />
+            </Link>
+          </Button>
           <Button asChild variant="ghost" size="icon" aria-label="Emergency app" title="Emergency">
             <Link href="/emergency">
               <AlertTriangle className="h-5 w-5 text-red-600" />

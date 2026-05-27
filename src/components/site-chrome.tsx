@@ -6,8 +6,10 @@ import { Header } from "./header";
 export function SiteChrome({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isEmergency = path?.startsWith("/emergency") ?? false;
+  const isMarketplace = path?.startsWith("/marketplace") ?? false;
+  const isPublicGym = path?.startsWith("/g/") ?? false;
 
-  if (isEmergency) {
+  if (isEmergency || isMarketplace || isPublicGym) {
     return <>{children}</>;
   }
 
