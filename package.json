@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma db push --skip-generate --accept-data-loss && tsx prisma/seed.ts && next build",
+    "build": "prisma generate && (if [ -n \"$POSTGRES_PRISMA_URL\" ]; then prisma db push --skip-generate --accept-data-loss && tsx prisma/seed.ts; else echo 'Skipping db push/seed — POSTGRES_PRISMA_URL not set'; fi) && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",

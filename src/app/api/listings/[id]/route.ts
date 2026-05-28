@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { settleExpiredAuctions } from "@/lib/expiry";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   await settleExpiredAuctions();
   const listing = await prisma.listing.findUnique({

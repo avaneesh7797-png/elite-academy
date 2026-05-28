@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { settleExpiredAuctions } from "@/lib/expiry";
 import { minNextBid } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({ amount: z.number().positive().max(10_000_000) });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
