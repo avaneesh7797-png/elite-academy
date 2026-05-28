@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { settleExpiredAuctions } from "@/lib/expiry";
 
+export const dynamic = "force-dynamic";
+
 const createSchema = z.object({
   title: z.string().min(3).max(120),
   description: z.string().min(10).max(4000),
