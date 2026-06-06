@@ -1,11 +1,13 @@
-// Shared types + presets for the Studio app (personal image / video generator).
-// No database — the backend is stateless and the gallery lives in localStorage.
+// Shared types + presets for the Studio app (personal image / video / audio generator).
+// No database — the backend is stateless and the gallery + API key live in localStorage.
 
-export type StudioMode = "image" | "video";
+export type StudioMode = "image" | "video" | "audio";
 
 export type AspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 
 export type ImageModel = "flux" | "flux-realism" | "flux-anime" | "flux-3d" | "turbo";
+
+export type AudioStyle = "music" | "ambience" | "soundfx" | "speech";
 
 export const ASPECT_RATIOS: { value: AspectRatio; label: string; w: number; h: number }[] = [
   { value: "1:1", label: "Square 1:1", w: 1024, h: 1024 },
@@ -23,9 +25,26 @@ export const IMAGE_MODELS: { value: ImageModel; label: string }[] = [
   { value: "turbo", label: "Turbo (fast)" },
 ];
 
+// Audio "styles" tweak the prompt sent to the model so one text-to-audio
+// model can cover music, ambience, sound effects and spoken word.
+export const AUDIO_STYLES: { value: AudioStyle; label: string; hint: string }[] = [
+  { value: "music", label: "Music", hint: "high quality music, " },
+  { value: "ambience", label: "Ambience", hint: "ambient background soundscape, " },
+  { value: "soundfx", label: "Sound FX", hint: "short sound effect, " },
+  { value: "speech", label: "Speech / Narration", hint: "clear spoken narration: " },
+];
+
+export const AUDIO_DURATIONS = [5, 8, 10, 15, 30] as const;
+export type AudioDuration = (typeof AUDIO_DURATIONS)[number];
+
 export function dimensionsFor(ratio: AspectRatio): { w: number; h: number } {
   const found = ASPECT_RATIOS.find((r) => r.value === ratio);
   return found ? { w: found.w, h: found.h } : { w: 1024, h: 1024 };
+}
+
+export function audioPrompt(style: AudioStyle, prompt: string): string {
+  const found = AUDIO_STYLES.find((s) => s.value === style);
+  return `${found?.hint ?? ""}${prompt}`;
 }
 
 // Request shape for POST /api/studio/generate
@@ -35,6 +54,8 @@ export type GenerateRequest = {
   ratio?: AspectRatio;
   model?: ImageModel;
   seed?: number;
+  audioStyle?: AudioStyle;
+  duration?: AudioDuration;
 };
 
 // What the API returns for an image request.
@@ -45,13 +66,15 @@ export type ImageResult = {
   seed: number;
 };
 
-// What the API returns when kicking off a video job.
-export type VideoJob = {
-  kind: "video";
+// What the API returns when kicking off a Replicate job (video or audio).
+export type MediaJob = {
+  kind: "video" | "audio";
   id: string;
   status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
   url?: string;
   error?: string;
 };
 
-export type GenerateResponse = ImageResult | VideoJob | { error: string; message: string };
+export type ApiError = { error: string; message: string };
+
+export type GenerateResponse = ImageResult | MediaJob | ApiError;

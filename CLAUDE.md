@@ -9,7 +9,7 @@ This repo holds four unrelated apps in a single Next.js codebase:
 1. **EliteBids marketplace** (`/`, `/listing`, `/sell`, `/watchlist`, `/account`, `/notifications`, `/seller`, `/api/*`) — auction marketplace. Requires Postgres (`POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`) and NextAuth (`NEXTAUTH_SECRET`). See `README.md`.
 2. **Emergency app** (`/emergency/*`) — installable PWA for emergencies. No backend, no auth — all data lives in `localStorage`. Works offline via service worker. Designed for mobile.
 3. **FitSpot activities marketplace** (`/marketplace/*`, `/g/[slug]`, `/api/marketplace/*`) — gym / yoga / sports business directory. Owners pay ₹7,000 one-time via PayU, get a customisable public page at `/g/<slug>` with plans, FAQ, contact, custom chatbot, and a membership-application form. Uses the same Postgres + NextAuth as EliteBids.
-4. **Studio** (`/studio`, `/api/studio/*`) — personal text-to-image / text-to-video generator. No database, no auth — the gallery lives in `localStorage`. Images are free with no API key (Pollinations); video needs `REPLICATE_API_TOKEN`. Standalone dark UI.
+4. **Studio** (`/studio`, `/api/studio/*`) — personal text-to-image / text-to-video / text-to-audio generator. No database, no auth — the gallery and API key live in `localStorage`. Images are free with no API key (Pollinations); video and audio need a Replicate token (paste it into the app via the "API key" button, or set `REPLICATE_API_TOKEN`). Standalone dark UI.
 
 The four apps share the Next.js project, Tailwind theme, NextAuth user table, and `lib/utils.ts`. Emergency and Studio do not depend on Prisma/NextAuth; FitSpot and EliteBids both do.
 
@@ -21,16 +21,18 @@ src/app/studio/
   page.tsx                # Prompt box, image/video toggle, options, localStorage gallery
 
 src/lib/studio/
-  types.ts                # Modes, aspect ratios, image models, request/response types
-  storage.ts              # localStorage gallery (Creation[]) load/save/add/remove/clear
+  types.ts                # Modes, aspect ratios, image models, audio styles/durations, req/res types
+  storage.ts              # localStorage gallery (Creation[]) + settings (Replicate token)
 
 src/app/api/studio/generate/route.ts
-  POST  # image -> builds a Pollinations image URL; video -> starts a Replicate prediction
-  GET   # ?id=<predictionId> -> polls a Replicate video job to completion
+  POST  # image -> Pollinations image URL; video/audio -> starts a Replicate prediction
+  GET   # ?id=<predictionId> -> polls a Replicate job (video or audio) to completion
 ```
 
-Env vars (both optional — images work without any): `REPLICATE_API_TOKEN` enables video;
-`STUDIO_VIDEO_MODEL` overrides the Replicate text-to-video model (default `wan-video/wan-2.1-1.3b`).
+The Replicate token is read from the `x-studio-key` request header (the token the user
+pastes into the app, stored in `localStorage`) and falls back to the `REPLICATE_API_TOKEN`
+env var. Env overrides (all optional — images work without any):
+`STUDIO_VIDEO_MODEL` (default `wan-video/wan-2.1-1.3b`), `STUDIO_AUDIO_MODEL` (default `meta/musicgen`).
 
 ## Stack
 
