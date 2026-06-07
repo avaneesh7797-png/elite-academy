@@ -12,6 +12,7 @@ export type Creation = {
   model?: ImageModel;
   audioStyle?: AudioStyle;
   seed?: number;
+  author?: string; // local profile name at the time it was created
   createdAt: number;
 };
 
