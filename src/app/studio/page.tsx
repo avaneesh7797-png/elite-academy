@@ -10,7 +10,6 @@ import {
   Loader2,
   Music,
   RefreshCw,
-  Sparkles,
   Trash2,
   User,
   Video,
@@ -364,9 +363,14 @@ export default function StudioPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 pb-24 pt-8">
       <header className="mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-fuchsia-500">
-          <Sparkles className="h-5 w-5 text-white" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/studio-icon.svg"
+          alt="Studio"
+          width={40}
+          height={40}
+          className="h-10 w-10 rounded-xl shadow-lg shadow-fuchsia-500/20"
+        />
         <div className="flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Studio</h1>
           <p className="text-sm text-zinc-400">

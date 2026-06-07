@@ -3,6 +3,10 @@ import type { Metadata, Viewport } from "next";
 export const metadata: Metadata = {
   title: "Studio — Image & Video Generator",
   description: "Personal AI studio for generating images and video from text prompts.",
+  icons: {
+    icon: "/studio-icon.svg",
+    apple: "/studio-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
