@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   Music,
+  RefreshCw,
   Sparkles,
   Trash2,
   Video,
@@ -56,6 +57,56 @@ const PROMPT_IDEAS: Record<StudioMode, string[]> = {
 
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Gallery image tile that tolerates slow / flaky Pollinations responses:
+// shows a spinner while loading, auto-retries a few times on error (with a
+// cache-busting param), then offers a manual retry instead of a broken icon.
+function ImageTile({ url, alt }: { url: string; alt: string }) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const src = attempt > 0 ? `${url}${url.includes("?") ? "&" : "?"}retry=${attempt}` : url;
+  const retrying = state === "error" && attempt < 3;
+
+  useEffect(() => {
+    if (!retrying) return;
+    const t = setTimeout(() => {
+      setState("loading");
+      setAttempt((a) => a + 1);
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [retrying]);
+
+  return (
+    <div className="relative w-full">
+      {state !== "loaded" && (
+        <div className="flex aspect-square w-full items-center justify-center bg-black">
+          {state === "loading" || retrying ? (
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+          ) : (
+            <button
+              onClick={() => {
+                setState("loading");
+                setAttempt((a) => a + 1);
+              }}
+              className="flex flex-col items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200"
+            >
+              <RefreshCw className="h-5 w-5" /> Tap to retry
+            </button>
+          )}
+        </div>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setState("loaded")}
+        onError={() => setState("error")}
+        className={state === "loaded" ? "w-full bg-black object-cover" : "hidden"}
+      />
+    </div>
+  );
 }
 
 // Read an uploaded file and downscale it to a compact JPEG data URI so the
@@ -233,12 +284,8 @@ export default function StudioPage() {
       }
 
       if (data.kind === "image") {
-        await new Promise<void>((resolve) => {
-          const img = new Image();
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
-          img.src = data.url;
-        });
+        // Save immediately; the gallery tile renders a spinner and retries
+        // while the (sometimes slow) image URL loads.
         setBusy(false);
         setStatus("");
         save({
@@ -564,8 +611,7 @@ export default function StudioPage() {
                     <audio src={c.url} controls className="w-full" />
                   </div>
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.url} alt={c.prompt} className="w-full bg-black object-cover" loading="lazy" />
+                  <ImageTile url={c.url} alt={c.prompt} />
                 )}
                 <figcaption className="flex items-start gap-2 p-3">
                   <p className="line-clamp-2 flex-1 text-xs text-zinc-400">{c.prompt}</p>
