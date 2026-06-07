@@ -65,24 +65,41 @@ function newId() {
 function ImageTile({ url, alt }: { url: string; alt: string }) {
   const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
-  const src = attempt > 0 ? `${url}${url.includes("?") ? "&" : "?"}retry=${attempt}` : url;
   const retrying = state === "error" && attempt < 3;
 
+  // Auto-retry after an error by reloading the *same* URL (the <img> remounts
+  // via `key`). Pollinations generates on first request, so the retry usually
+  // hits its cache for this exact prompt+seed and returns quickly.
   useEffect(() => {
     if (!retrying) return;
     const t = setTimeout(() => {
       setState("loading");
       setAttempt((a) => a + 1);
-    }, 2500);
+    }, 2000);
     return () => clearTimeout(t);
   }, [retrying]);
+
+  // Watchdog: the first request triggers generation and can be slow on a poor
+  // connection. A stalled image request never fires onError, so cap the wait —
+  // if it hasn't loaded in 30s, flip to error so retry (or the manual button)
+  // can recover instead of spinning forever.
+  useEffect(() => {
+    if (state !== "loading") return;
+    const t = setTimeout(() => setState("error"), 30000);
+    return () => clearTimeout(t);
+  }, [state, attempt]);
 
   return (
     <div className="relative w-full">
       {state !== "loaded" && (
-        <div className="flex aspect-square w-full items-center justify-center bg-black">
+        <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-black">
           {state === "loading" || retrying ? (
-            <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+            <>
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+              <span className="text-[11px] text-zinc-600">
+                {attempt > 0 ? "Retrying…" : "Generating…"}
+              </span>
+            </>
           ) : (
             <button
               onClick={() => {
@@ -98,7 +115,8 @@ function ImageTile({ url, alt }: { url: string; alt: string }) {
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        key={attempt}
+        src={url}
         alt={alt}
         loading="lazy"
         onLoad={() => setState("loaded")}
