@@ -25,14 +25,21 @@ src/lib/studio/
   storage.ts              # localStorage gallery (Creation[]) + settings (Replicate token)
 
 src/app/api/studio/generate/route.ts
-  POST  # image -> Pollinations image URL; video/audio -> starts a Replicate prediction
+  POST  # image -> Pollinations image URL; video/audio -> starts a Replicate prediction.
+        # video with an `image` field (URL or data URI) -> image-to-video instead.
   GET   # ?id=<predictionId> -> polls a Replicate job (video or audio) to completion
 ```
+
+Video mode supports both text-to-video and image-to-video: the UI lets you upload a
+still (or hit "Animate" on a generated image) and describe how it should move.
 
 The Replicate token is read from the `x-studio-key` request header (the token the user
 pastes into the app, stored in `localStorage`) and falls back to the `REPLICATE_API_TOKEN`
 env var. Env overrides (all optional — images work without any):
-`STUDIO_VIDEO_MODEL` (default `wan-video/wan-2.1-1.3b`), `STUDIO_AUDIO_MODEL` (default `meta/musicgen`).
+`STUDIO_VIDEO_MODEL` (text-to-video, default `wan-video/wan-2.1-1.3b`),
+`STUDIO_I2V_MODEL` (image-to-video, default `minimax/video-01`) + `STUDIO_I2V_IMAGE_KEY`
+(that model's image input field, default `first_frame_image`),
+`STUDIO_AUDIO_MODEL` (default `meta/musicgen`).
 
 ## Stack
 

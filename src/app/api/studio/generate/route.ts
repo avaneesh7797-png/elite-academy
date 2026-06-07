@@ -24,12 +24,18 @@ const bodySchema = z.object({
   seed: z.number().int().positive().optional(),
   audioStyle: z.enum(["music", "ambience", "soundfx", "speech"]).optional(),
   duration: z.number().int().min(1).max(60).optional(),
+  // Source image for image-to-video (remote URL or data: URI). Capped so a
+  // base64 upload stays under serverless body limits — the client downscales.
+  image: z.string().max(8_000_000).optional(),
 });
 
 // Replicate official models. Override via env (format "owner/name"). Using the
 // official-model predictions endpoint means we don't have to pin a version hash.
 const VIDEO_MODEL = process.env.STUDIO_VIDEO_MODEL || "wan-video/wan-2.1-1.3b";
 const AUDIO_MODEL = process.env.STUDIO_AUDIO_MODEL || "meta/musicgen";
+// Image-to-video model + the name of its image input field (varies per model).
+const I2V_MODEL = process.env.STUDIO_I2V_MODEL || "minimax/video-01";
+const I2V_IMAGE_KEY = process.env.STUDIO_I2V_IMAGE_KEY || "first_frame_image";
 
 // The token comes from the request header (user pasted it in the app) first,
 // then falls back to the server env var.
@@ -127,6 +133,16 @@ export async function POST(req: NextRequest) {
 
   if (parsed.mode === "video") {
     if (!token) return missingTokenResponse("video");
+    // Image-to-video: animate the supplied still according to the prompt.
+    if (parsed.image) {
+      return startReplicate(
+        "video",
+        I2V_MODEL,
+        { prompt: parsed.prompt, [I2V_IMAGE_KEY]: parsed.image },
+        token,
+      );
+    }
+    // Text-to-video: generate a clip from the prompt alone.
     const ratio = parsed.ratio ?? "16:9";
     return startReplicate(
       "video",
