@@ -1,6 +1,6 @@
 "use client";
 
-import type { AspectRatio, AudioStyle, ImageModel, StudioMode } from "./types";
+import type { AspectRatio, AudioStyle, ImageModel, Motion, StudioMode, VideoSource } from "./types";
 
 // A single saved creation in the personal gallery (localStorage only).
 export type Creation = {
@@ -14,11 +14,19 @@ export type Creation = {
   seed?: number;
   author?: string; // local profile name at the time it was created
   createdAt: number;
+  favorite?: boolean;
+  style?: string; // style preset id used
+  // Free in-browser video: rendered live from these frames + a motion preset.
+  source?: VideoSource;
+  images?: string[];
+  motion?: Motion;
+  durationMs?: number;
+  fps?: number;
 };
 
 const GALLERY_KEY = "studio:gallery:v1";
 const SETTINGS_KEY = "studio:settings:v1";
-const MAX_ITEMS = 100;
+const MAX_ITEMS = 120;
 
 export function loadGallery(): Creation[] {
   if (typeof window === "undefined") return [];
@@ -34,11 +42,26 @@ export function loadGallery(): Creation[] {
 
 function saveGallery(items: Creation[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(GALLERY_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+  try {
+    window.localStorage.setItem(GALLERY_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
+  } catch {
+    // Storage full — drop the oldest half and retry once.
+    try {
+      window.localStorage.setItem(GALLERY_KEY, JSON.stringify(items.slice(0, Math.floor(MAX_ITEMS / 2))));
+    } catch {
+      /* give up silently */
+    }
+  }
 }
 
 export function addCreation(c: Creation): Creation[] {
   const next = [c, ...loadGallery()].slice(0, MAX_ITEMS);
+  saveGallery(next);
+  return next;
+}
+
+export function addCreations(cs: Creation[]): Creation[] {
+  const next = [...cs, ...loadGallery()].slice(0, MAX_ITEMS);
   saveGallery(next);
   return next;
 }
@@ -49,20 +72,57 @@ export function removeCreation(id: string): Creation[] {
   return next;
 }
 
+export function updateCreation(id: string, patch: Partial<Creation>): Creation[] {
+  const next = loadGallery().map((c) => (c.id === id ? { ...c, ...patch } : c));
+  saveGallery(next);
+  return next;
+}
+
+export function toggleFavorite(id: string): Creation[] {
+  const next = loadGallery().map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c));
+  saveGallery(next);
+  return next;
+}
+
 export function clearGallery(): Creation[] {
   saveGallery([]);
   return [];
 }
 
-// --- Settings: the user's local profile + the Replicate API key ---
+export function replaceGallery(items: Creation[]): Creation[] {
+  const next = items.slice(0, MAX_ITEMS);
+  saveGallery(next);
+  return next;
+}
+
+// --- Import / export the whole gallery as JSON ---
+export function exportGalleryJSON(): string {
+  return JSON.stringify(loadGallery(), null, 2);
+}
+
+export function importGalleryJSON(json: string): Creation[] {
+  const parsed = JSON.parse(json);
+  if (!Array.isArray(parsed)) throw new Error("Not a gallery export");
+  // Merge with existing, de-duped by id, newest first.
+  const seen = new Set<string>();
+  const merged = [...parsed, ...loadGallery()].filter((c) => {
+    if (!c || typeof c.id !== "string" || seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+  return replaceGallery(merged);
+}
+
+// --- Settings: the user's local profile, accent theme + the Replicate API key ---
 
 export type StudioSettings = {
   replicateToken: string;
   name: string;
   email: string;
+  accent: string;
 };
 
-const EMPTY_SETTINGS: StudioSettings = { replicateToken: "", name: "", email: "" };
+const EMPTY_SETTINGS: StudioSettings = { replicateToken: "", name: "", email: "", accent: "indigo" };
 
 export function loadSettings(): StudioSettings {
   if (typeof window === "undefined") return EMPTY_SETTINGS;
