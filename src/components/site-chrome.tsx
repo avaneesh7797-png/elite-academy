@@ -8,8 +8,9 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
   const isEmergency = path?.startsWith("/emergency") ?? false;
   const isMarketplace = path?.startsWith("/marketplace") ?? false;
   const isPublicGym = path?.startsWith("/g/") ?? false;
+  const isStudio = path?.startsWith("/studio") ?? false;
 
-  if (isEmergency || isMarketplace || isPublicGym) {
+  if (isEmergency || isMarketplace || isPublicGym || isStudio) {
     return <>{children}</>;
   }
 

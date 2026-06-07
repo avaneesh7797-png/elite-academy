@@ -4,13 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What lives here
 
-This repo holds three unrelated apps in a single Next.js codebase:
+This repo holds four unrelated apps in a single Next.js codebase:
 
 1. **EliteBids marketplace** (`/`, `/listing`, `/sell`, `/watchlist`, `/account`, `/notifications`, `/seller`, `/api/*`) — auction marketplace. Requires Postgres (`POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`) and NextAuth (`NEXTAUTH_SECRET`). See `README.md`.
 2. **Emergency app** (`/emergency/*`) — installable PWA for emergencies. No backend, no auth — all data lives in `localStorage`. Works offline via service worker. Designed for mobile.
 3. **FitSpot activities marketplace** (`/marketplace/*`, `/g/[slug]`, `/api/marketplace/*`) — gym / yoga / sports business directory. Owners pay ₹7,000 one-time via PayU, get a customisable public page at `/g/<slug>` with plans, FAQ, contact, custom chatbot, and a membership-application form. Uses the same Postgres + NextAuth as EliteBids.
+4. **Studio** (`/studio`, `/api/studio/*`) — personal text-to-image / text-to-video / text-to-audio generator. No database, no auth — the gallery and API key live in `localStorage`. Images are free with no API key (Pollinations); video and audio need a Replicate token (paste it into the app via the "API key" button, or set `REPLICATE_API_TOKEN`). Standalone dark UI.
 
-The three apps share the Next.js project, Tailwind theme, NextAuth user table, and `lib/utils.ts`. Emergency does not depend on Prisma/NextAuth; FitSpot and EliteBids both do.
+The four apps share the Next.js project, Tailwind theme, NextAuth user table, and `lib/utils.ts`. Emergency and Studio do not depend on Prisma/NextAuth; FitSpot and EliteBids both do.
+
+## Studio app layout
+
+```
+src/app/studio/
+  layout.tsx              # Standalone full-screen dark layout
+  page.tsx                # Prompt box, image/video toggle, options, localStorage gallery
+
+src/lib/studio/
+  types.ts                # Modes, aspect ratios, image models, audio styles/durations, req/res types
+  storage.ts              # localStorage gallery (Creation[]) + settings (Replicate token)
+
+src/app/api/studio/generate/route.ts
+  POST  # image -> Pollinations image URL; video/audio -> starts a Replicate prediction
+  GET   # ?id=<predictionId> -> polls a Replicate job (video or audio) to completion
+```
+
+The Replicate token is read from the `x-studio-key` request header (the token the user
+pastes into the app, stored in `localStorage`) and falls back to the `REPLICATE_API_TOKEN`
+env var. Env overrides (all optional — images work without any):
+`STUDIO_VIDEO_MODEL` (default `wan-video/wan-2.1-1.3b`), `STUDIO_AUDIO_MODEL` (default `meta/musicgen`).
 
 ## Stack
 
@@ -94,7 +116,7 @@ src/components/marketplace/  # marketplace-chrome, browse-filters, register-form
                              # dashboard-editor (tabs), public-business-page (hero/plans/chat)
 ```
 
-Site chrome routing: `src/components/site-chrome.tsx` skips the EliteBids header/footer for `/emergency/*`, `/marketplace/*`, and `/g/*` so each app feels standalone.
+Site chrome routing: `src/components/site-chrome.tsx` skips the EliteBids header/footer for `/emergency/*`, `/marketplace/*`, `/g/*`, and `/studio*` so each app feels standalone.
 
 PayU link: `NEXT_PUBLIC_MARKETPLACE_PAYU_LINK` (default `https://u.payu.in/QIflja9WMldm`). Activation flow is owner-submitted: they open PayU in a new tab, paste the Transaction ID back, and the listing flips to `active` immediately.
 
