@@ -53,13 +53,15 @@ export function clearGallery(): Creation[] {
   return [];
 }
 
-// --- Settings: the Replicate API key the user pastes into the app ---
+// --- Settings: the user's local profile + the Replicate API key ---
 
 export type StudioSettings = {
   replicateToken: string;
+  name: string;
+  email: string;
 };
 
-const EMPTY_SETTINGS: StudioSettings = { replicateToken: "" };
+const EMPTY_SETTINGS: StudioSettings = { replicateToken: "", name: "", email: "" };
 
 export function loadSettings(): StudioSettings {
   if (typeof window === "undefined") return EMPTY_SETTINGS;
