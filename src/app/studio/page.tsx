@@ -247,6 +247,7 @@ export default function StudioPage() {
                 url: data.url,
                 ratio: mediaMode === "video" ? ratio : undefined,
                 audioStyle: mediaMode === "audio" ? audioStyle : undefined,
+                author: name.trim() || undefined,
                 createdAt: Date.now(),
               });
               return;
@@ -321,6 +322,7 @@ export default function StudioPage() {
           ratio,
           model,
           seed: data.seed,
+          author: name.trim() || undefined,
           createdAt: Date.now(),
         });
         return;
@@ -337,6 +339,7 @@ export default function StudioPage() {
           url: data.url,
           ratio: mode === "video" ? ratio : undefined,
           audioStyle: mode === "audio" ? audioStyle : undefined,
+          author: name.trim() || undefined,
           createdAt: Date.now(),
         });
         return;
@@ -701,7 +704,12 @@ export default function StudioPage() {
                   <ImageTile url={c.url} alt={c.prompt} />
                 )}
                 <figcaption className="flex items-start gap-2 p-3">
-                  <p className="line-clamp-2 flex-1 text-xs text-zinc-400">{c.prompt}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-xs text-zinc-400">{c.prompt}</p>
+                    {c.author && (
+                      <p className="mt-1 truncate text-[11px] text-zinc-600">by {c.author}</p>
+                    )}
+                  </div>
                   {c.mode === "image" && (
                     <button
                       onClick={() => animateFromGallery(c.url)}
