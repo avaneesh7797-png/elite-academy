@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  User,
   Video,
   Wand2,
   X,
@@ -156,6 +157,10 @@ export default function StudioPage() {
   const [gallery, setGallery] = useState<Creation[]>([]);
   const [token, setToken] = useState("");
   const [showKey, setShowKey] = useState(false);
+  // Local profile — remembered in this browser (no account, no backend).
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [showProfile, setShowProfile] = useState(false);
   // Source still for image-to-video (data URI from upload, or a gallery image URL).
   const [videoImage, setVideoImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -163,11 +168,26 @@ export default function StudioPage() {
 
   useEffect(() => {
     setGallery(loadGallery());
-    setToken(loadSettings().replicateToken);
+    const s = loadSettings();
+    setToken(s.replicateToken);
+    setName(s.name);
+    setEmail(s.email);
+    // Prompt for a profile on first visit if nothing is saved yet.
+    if (!s.email && !s.name) setShowProfile(true);
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, []);
+
+  // Persist all settings together so saving one field never clobbers the others.
+  function persistSettings(over: Partial<{ replicateToken: string; name: string; email: string }> = {}) {
+    saveSettings({
+      replicateToken: token.trim(),
+      name: name.trim(),
+      email: email.trim(),
+      ...over,
+    });
+  }
 
   const authHeaders = useCallback((): HeadersInit => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -180,8 +200,13 @@ export default function StudioPage() {
   }, []);
 
   function persistToken() {
-    saveSettings({ replicateToken: token.trim() });
+    persistSettings({ replicateToken: token.trim() });
     setShowKey(false);
+  }
+
+  function persistProfile() {
+    persistSettings();
+    setShowProfile(false);
   }
 
   async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -341,8 +366,24 @@ export default function StudioPage() {
         </div>
         <div className="flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Studio</h1>
-          <p className="text-sm text-zinc-400">Generate images, video &amp; audio from a prompt</p>
+          <p className="text-sm text-zinc-400">
+            {name || email
+              ? `Welcome back, ${name || email}`
+              : "Generate images, video & audio from a prompt"}
+          </p>
         </div>
+        <button
+          onClick={() => setShowProfile((v) => !v)}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+            email || name
+              ? "border-indigo-700 text-indigo-300 hover:bg-indigo-950/40"
+              : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          }`}
+          title="Your profile (remembered on this device)"
+        >
+          <User className="h-3.5 w-3.5" />
+          {email || name ? "Profile" : "Sign in"}
+        </button>
         <button
           onClick={() => setShowKey((v) => !v)}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
@@ -356,6 +397,52 @@ export default function StudioPage() {
           {token.trim() ? "Key set" : "API key"}
         </button>
       </header>
+
+      {/* Profile panel — remembered locally in this browser */}
+      {showProfile && (
+        <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+          <label className="mb-1 block text-xs font-medium text-zinc-300">Your profile</label>
+          <p className="mb-3 text-xs text-zinc-500">
+            Saved only in this browser — no account, no password. It personalizes the app and
+            sits alongside your API key and gallery (which are also kept on this device).
+          </p>
+          <div className="space-y-2">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name (optional)"
+              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+            />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@email.com"
+              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+            />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={persistProfile}
+              className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
+            >
+              Save
+            </button>
+            {(email || name) && (
+              <button
+                onClick={() => {
+                  setName("");
+                  setEmail("");
+                  persistSettings({ name: "", email: "" });
+                }}
+                className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* API key panel */}
       {showKey && (
@@ -391,7 +478,7 @@ export default function StudioPage() {
               <button
                 onClick={() => {
                   setToken("");
-                  saveSettings({ replicateToken: "" });
+                  persistSettings({ replicateToken: "" });
                 }}
                 className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
               >
