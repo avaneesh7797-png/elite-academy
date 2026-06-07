@@ -1,0 +1,19 @@
+{
+  "name": "Studio — AI Image & Video",
+  "short_name": "Studio",
+  "description": "Personal AI studio: generate images, free in-browser motion videos, and audio from a prompt.",
+  "start_url": "/studio",
+  "scope": "/studio",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/studio-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

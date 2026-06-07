@@ -1,41 +1,69 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
   Clapperboard,
+  Copy,
   Download,
+  Film,
+  Heart,
   ImageIcon,
   ImagePlus,
   KeyRound,
   Loader2,
+  Maximize2,
   Music,
+  Palette,
   RefreshCw,
+  Repeat2,
+  Search,
+  Share2,
+  Shuffle,
+  Sparkles,
   Trash2,
+  Upload,
   User,
   Video,
   Wand2,
   X,
 } from "lucide-react";
 import {
+  ACCENT_THEMES,
   ASPECT_RATIOS,
   AUDIO_DURATIONS,
   AUDIO_STYLES,
   IMAGE_MODELS,
+  MOTION_PRESETS,
+  STYLE_PRESETS,
+  VIDEO_DURATIONS,
+  accentTheme,
+  applyStyle,
+  enhancePrompt,
+  randomPrompt,
+  withNegative,
   type AspectRatio,
   type AudioDuration,
   type AudioStyle,
   type ImageModel,
+  type Motion,
   type StudioMode,
+  type VideoDuration,
 } from "@/lib/studio/types";
 import {
   addCreation,
+  addCreations,
   clearGallery,
+  exportGalleryJSON,
+  importGalleryJSON,
   loadGallery,
   loadSettings,
   removeCreation,
   saveSettings,
+  toggleFavorite,
   type Creation,
 } from "@/lib/studio/storage";
+import CanvasVideo from "@/components/studio/canvas-video";
 
 const PROMPT_IDEAS: Record<StudioMode, string[]> = {
   image: [
@@ -55,21 +83,18 @@ const PROMPT_IDEAS: Record<StudioMode, string[]> = {
   ],
 };
 
+type Filter = "all" | "image" | "video" | "audio" | "favorites";
+
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Gallery image tile that tolerates slow / flaky Pollinations responses:
-// shows a spinner while loading, auto-retries a few times on error (with a
-// cache-busting param), then offers a manual retry instead of a broken icon.
-function ImageTile({ url, alt }: { url: string; alt: string }) {
+// Gallery image tile that tolerates slow / flaky Pollinations responses.
+function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: () => void }) {
   const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const retrying = state === "error" && attempt < 3;
 
-  // Auto-retry after an error by reloading the *same* URL (the <img> remounts
-  // via `key`). Pollinations generates on first request, so the retry usually
-  // hits its cache for this exact prompt+seed and returns quickly.
   useEffect(() => {
     if (!retrying) return;
     const t = setTimeout(() => {
@@ -79,10 +104,6 @@ function ImageTile({ url, alt }: { url: string; alt: string }) {
     return () => clearTimeout(t);
   }, [retrying]);
 
-  // Watchdog: the first request triggers generation and can be slow on a poor
-  // connection. A stalled image request never fires onError, so cap the wait —
-  // if it hasn't loaded in 30s, flip to error so retry (or the manual button)
-  // can recover instead of spinning forever.
   useEffect(() => {
     if (state !== "loading") return;
     const t = setTimeout(() => setState("error"), 30000);
@@ -96,9 +117,7 @@ function ImageTile({ url, alt }: { url: string; alt: string }) {
           {state === "loading" || retrying ? (
             <>
               <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-              <span className="text-[11px] text-zinc-600">
-                {attempt > 0 ? "Retrying…" : "Generating…"}
-              </span>
+              <span className="text-[11px] text-zinc-600">{attempt > 0 ? "Retrying…" : "Generating…"}</span>
             </>
           ) : (
             <button
@@ -121,15 +140,15 @@ function ImageTile({ url, alt }: { url: string; alt: string }) {
         loading="lazy"
         onLoad={() => setState("loaded")}
         onError={() => setState("error")}
-        className={state === "loaded" ? "w-full bg-black object-cover" : "hidden"}
+        onClick={onOpen}
+        className={state === "loaded" ? "w-full cursor-zoom-in bg-black object-cover" : "hidden"}
       />
     </div>
   );
 }
 
-// Read an uploaded file and downscale it to a compact JPEG data URI so the
-// upload stays well under serverless body limits before going to Replicate.
-async function fileToDataUrl(file: File, max = 1024, quality = 0.85): Promise<string> {
+// Read an uploaded file and downscale it to a compact JPEG data URI.
+async function fileToDataUrl(file: File, max = 1280, quality = 0.85): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(fr.result as string);
@@ -166,22 +185,47 @@ export default function StudioPage() {
   const [prompt, setPrompt] = useState("");
   const [ratio, setRatio] = useState<AspectRatio>("1:1");
   const [model, setModel] = useState<ImageModel>("flux");
+  const [style, setStyle] = useState("none");
+  const [negative, setNegative] = useState("");
+  const [batch, setBatch] = useState(1);
+  const [seedInput, setSeedInput] = useState("");
+  const [lockSeed, setLockSeed] = useState(false);
+
   const [audioStyle, setAudioStyle] = useState<AudioStyle>("music");
   const [duration, setDuration] = useState<AudioDuration>(8);
+
+  // Free in-browser video controls.
+  const [videoEngine, setVideoEngine] = useState<"free" | "pro">("free");
+  const [motion, setMotion] = useState<Motion>("kenburns");
+  const [frames, setFrames] = useState(3);
+  const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
+  const [videoImage, setVideoImage] = useState<string | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const [gallery, setGallery] = useState<Creation[]>([]);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
+  const [lightbox, setLightbox] = useState<Creation | null>(null);
+
   const [token, setToken] = useState("");
   const [showKey, setShowKey] = useState(false);
-  // Local profile — remembered in this browser (no account, no backend).
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [accent, setAccent] = useState("indigo");
   const [showProfile, setShowProfile] = useState(false);
-  // Source still for image-to-video (data URI from upload, or a gallery image URL).
-  const [videoImage, setVideoImage] = useState<string | null>(null);
+
+  const [toasts, setToasts] = useState<{ id: string; msg: string }[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const theme = accentTheme(accent as never);
 
   useEffect(() => {
     setGallery(loadGallery());
@@ -189,19 +233,25 @@ export default function StudioPage() {
     setToken(s.replicateToken);
     setName(s.name);
     setEmail(s.email);
-    // Prompt for a profile on first visit if nothing is saved yet.
+    setAccent(s.accent || "indigo");
     if (!s.email && !s.name) setShowProfile(true);
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, []);
 
-  // Persist all settings together so saving one field never clobbers the others.
-  function persistSettings(over: Partial<{ replicateToken: string; name: string; email: string }> = {}) {
+  function toast(msg: string) {
+    const id = newId();
+    setToasts((t) => [...t, { id, msg }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+  }
+
+  function persistSettings(over: Partial<{ replicateToken: string; name: string; email: string; accent: string }> = {}) {
     saveSettings({
       replicateToken: token.trim(),
       name: name.trim(),
       email: email.trim(),
+      accent,
       ...over,
     });
   }
@@ -212,23 +262,26 @@ export default function StudioPage() {
     return h;
   }, [token]);
 
-  const save = useCallback((c: Creation) => {
-    setGallery(addCreation(c));
-  }, []);
-
   function persistToken() {
     persistSettings({ replicateToken: token.trim() });
     setShowKey(false);
+    toast(token.trim() ? "API key saved ✓" : "API key cleared");
   }
 
   function persistProfile() {
     persistSettings();
     setShowProfile(false);
+    toast("Profile saved ✓");
+  }
+
+  function chooseAccent(a: string) {
+    setAccent(a);
+    persistSettings({ accent: a });
   }
 
   async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-picking the same file
+    e.target.value = "";
     if (!file) return;
     try {
       setVideoImage(await fileToDataUrl(file));
@@ -237,14 +290,64 @@ export default function StudioPage() {
     }
   }
 
-  // Send an image you already generated straight into the Video tab to animate it.
-  function animateFromGallery(url: string) {
-    setVideoImage(url);
+  function animateFromGallery(c: Creation) {
+    setVideoImage(c.url);
     setMode("video");
+    setVideoEngine("free");
+    setPrompt(c.prompt);
     setError("");
+    setLightbox(null);
+    toast("Loaded into the Video tab — pick a motion and Generate.");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function remix(c: Creation) {
+    setPrompt(c.prompt);
+    if (c.ratio) setRatio(c.ratio);
+    if (c.model) setModel(c.model);
+    if (c.style) setStyle(c.style);
+    if (c.mode === "image" || c.mode === "video" || c.mode === "audio") setMode(c.mode);
+    if (c.mode === "video") {
+      setVideoEngine(c.source === "free" ? "free" : "pro");
+      if (c.motion) setMotion(c.motion);
+    }
+    if (c.audioStyle) setAudioStyle(c.audioStyle);
+    setLightbox(null);
+    toast("Settings loaded — tweak and Generate.");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function copyText(text: string, label: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+      toast(`${label} copied ✓`);
+    } catch {
+      toast("Couldn't copy.");
+    }
+  }
+
+  async function shareCreation(c: Creation) {
+    const nav = navigator as Navigator & { share?: (d: unknown) => Promise<void> };
+    if (nav.share && c.url) {
+      try {
+        await nav.share({ title: "Studio creation", text: c.prompt, url: c.url });
+      } catch {
+        /* user cancelled */
+      }
+    } else if (c.url) {
+      copyText(c.url, "Link", `share-${c.id}`);
+    } else {
+      toast("This clip lives in your browser — use Export to save a file.");
+    }
+  }
+
+  const save = useCallback((c: Creation) => {
+    setGallery(addCreation(c));
+  }, []);
+
+  // ---- Replicate (paid) path for pro video & audio ----
   const pollJob = useCallback(
     (id: string, mediaMode: StudioMode, promptText: string, attempt = 0) => {
       pollRef.current = setTimeout(
@@ -260,6 +363,7 @@ export default function StudioPage() {
               save({
                 id: newId(),
                 mode: mediaMode,
+                source: "replicate",
                 prompt: promptText,
                 url: data.url,
                 ratio: mediaMode === "video" ? ratio : undefined,
@@ -272,7 +376,7 @@ export default function StudioPage() {
             if (data.status === "failed" || data.error) {
               setBusy(false);
               setStatus("");
-              setError(data.error || data.message || "Generation failed.");
+              setError(friendlyError(data.error || data.message || "Generation failed."));
               return;
             }
             if (attempt > 80) {
@@ -292,16 +396,22 @@ export default function StudioPage() {
         attempt === 0 ? 2000 : 3000,
       );
     },
-    [authHeaders, save, ratio, audioStyle],
+    [authHeaders, save, ratio, audioStyle, name],
   );
 
-  async function generate() {
-    const trimmed = prompt.trim();
-    if (!trimmed || busy) return;
-    setError("");
-    setBusy(true);
-    setStatus(mode === "image" ? "Generating image…" : `Starting ${mode} render…`);
+  function friendlyError(msg: string): string {
+    if (/insufficient credit|402/i.test(msg)) {
+      return "Video/audio on Replicate needs account credit. Add a card at replicate.com/account/billing, then try again. Tip: images and the free in-browser video engine cost nothing.";
+    }
+    if (msg === "token_missing") {
+      return "That mode needs a Replicate API key — add it with the “API key” button. (Or use the free in-browser video engine instead.)";
+    }
+    return msg;
+  }
 
+  async function proGenerate(trimmed: string) {
+    setBusy(true);
+    setStatus(`Starting ${mode} render…`);
     try {
       const res = await fetch("/api/studio/generate", {
         method: "POST",
@@ -317,41 +427,20 @@ export default function StudioPage() {
         }),
       });
       const data = await res.json();
-
       if (data.error) {
         setBusy(false);
         setStatus("");
-        setError(data.message || "Something went wrong.");
+        setError(friendlyError(data.message || data.error || "Something went wrong."));
         if (data.error === "token_missing") setShowKey(true);
         return;
       }
-
-      if (data.kind === "image") {
-        // Save immediately; the gallery tile renders a spinner and retries
-        // while the (sometimes slow) image URL loads.
-        setBusy(false);
-        setStatus("");
-        save({
-          id: newId(),
-          mode: "image",
-          prompt: trimmed,
-          url: data.url,
-          ratio,
-          model,
-          seed: data.seed,
-          author: name.trim() || undefined,
-          createdAt: Date.now(),
-        });
-        return;
-      }
-
-      // video or audio job
       if (data.status === "succeeded" && data.url) {
         setBusy(false);
         setStatus("");
         save({
           id: newId(),
           mode,
+          source: "replicate",
           prompt: trimmed,
           url: data.url,
           ratio: mode === "video" ? ratio : undefined,
@@ -369,17 +458,188 @@ export default function StudioPage() {
     }
   }
 
+  // ---- Free image generation (Pollinations) ----
+  async function requestImage(finalPrompt: string, seed: number): Promise<{ url: string; seed: number }> {
+    const res = await fetch("/api/studio/generate", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ mode: "image", prompt: finalPrompt, ratio, model, seed }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(friendlyError(data.message || data.error));
+    return { url: data.url, seed: data.seed };
+  }
+
+  async function generateImages(count: number) {
+    const base = prompt.trim();
+    const finalPrompt = withNegative(applyStyle(base, style), negative);
+    const created: Creation[] = [];
+    for (let i = 0; i < count; i++) {
+      setStatus(count > 1 ? `Generating image ${i + 1} of ${count}…` : "Generating image…");
+      const baseSeed = lockSeed && seedInput ? Number(seedInput) : Math.floor(Math.random() * 1_000_000_000);
+      const { url, seed } = await requestImage(finalPrompt, baseSeed + i);
+      created.push({
+        id: newId(),
+        mode: "image",
+        prompt: base,
+        url,
+        ratio,
+        model,
+        style: style !== "none" ? style : undefined,
+        seed,
+        author: name.trim() || undefined,
+        createdAt: Date.now() + i,
+      });
+    }
+    setGallery(addCreations(created));
+    toast(count > 1 ? `${count} images added ✓` : "Image added ✓");
+  }
+
+  async function generateFreeVideo() {
+    const base = prompt.trim();
+    const styled = applyStyle(base, style);
+    let images: string[];
+    if (videoImage) {
+      images = [videoImage];
+    } else {
+      const count = motion === "morph" ? Math.max(2, frames) : 1;
+      images = [];
+      for (let i = 0; i < count; i++) {
+        setStatus(count > 1 ? `Rendering frame ${i + 1} of ${count}…` : "Rendering the frame…");
+        const { url } = await requestImage(styled, Math.floor(Math.random() * 1_000_000_000));
+        images.push(url);
+      }
+    }
+    save({
+      id: newId(),
+      mode: "video",
+      source: "free",
+      prompt: base || "Animated image",
+      url: "",
+      images,
+      motion,
+      durationMs: videoDuration * 1000,
+      fps: 30,
+      ratio,
+      style: style !== "none" ? style : undefined,
+      author: name.trim() || undefined,
+      createdAt: Date.now(),
+    });
+    toast("Video ready — it loops live below. Tap Export to save a file.");
+  }
+
+  async function generate() {
+    const trimmed = prompt.trim();
+    if (busy) return;
+    const needsPrompt = !(mode === "video" && videoEngine === "free" && videoImage);
+    if (needsPrompt && !trimmed) return;
+    setError("");
+
+    if (mode === "image") {
+      setBusy(true);
+      try {
+        await generateImages(batch);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Image generation failed.");
+      } finally {
+        setBusy(false);
+        setStatus("");
+      }
+      return;
+    }
+
+    if (mode === "video" && videoEngine === "free") {
+      setBusy(true);
+      try {
+        await generateFreeVideo();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Video generation failed.");
+      } finally {
+        setBusy(false);
+        setStatus("");
+      }
+      return;
+    }
+
+    // Pro (Replicate) video / audio.
+    proGenerate(trimmed);
+  }
+
   function onKeyDown(e: React.KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate();
   }
 
+  function doExportGallery() {
+    try {
+      const blob = new Blob([exportGalleryJSON()], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `studio-gallery-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast("Gallery exported ✓");
+    } catch {
+      toast("Couldn't export the gallery.");
+    }
+  }
+
+  async function onImportGallery(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setGallery(importGalleryJSON(text));
+      toast("Gallery imported ✓");
+    } catch {
+      toast("That doesn't look like a gallery export.");
+    }
+  }
+
+  const recentPrompts = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const c of gallery) {
+      const p = c.prompt?.trim();
+      if (p && !seen.has(p)) {
+        seen.add(p);
+        out.push(p);
+      }
+      if (out.length >= 6) break;
+    }
+    return out;
+  }, [gallery]);
+
+  const favCount = useMemo(() => gallery.filter((c) => c.favorite).length, [gallery]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return gallery.filter((c) => {
+      if (filter === "favorites" && !c.favorite) return false;
+      if (filter !== "all" && filter !== "favorites" && c.mode !== filter) return false;
+      if (q && !c.prompt.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [gallery, filter, search]);
+
   const tabBtn = (active: boolean) =>
     `flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-      active ? "bg-indigo-500 text-white" : "text-zinc-400 hover:text-zinc-200"
+      active ? `${theme.solid} text-white` : "text-zinc-400 hover:text-zinc-200"
     }`;
 
+  const filterBtn = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+      active ? `${theme.solid} text-white` : "border border-zinc-700 text-zinc-400 hover:text-zinc-200"
+    }`;
+
+  const showAspect = mode === "image" || (mode === "video" && (videoEngine === "free" || !videoImage));
+
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-24 pt-8">
+    <div className="mx-auto max-w-3xl px-4 pb-28 pt-8">
+      {/* Header */}
       <header className="mb-6 flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -387,24 +647,20 @@ export default function StudioPage() {
           alt="Studio"
           width={40}
           height={40}
-          className="h-10 w-10 rounded-xl shadow-lg shadow-fuchsia-500/20"
+          className={`h-10 w-10 rounded-xl shadow-lg ${theme.shadow}`}
         />
         <div className="flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Studio</h1>
           <p className="text-sm text-zinc-400">
-            {name || email
-              ? `Welcome back, ${name || email}`
-              : "Generate images, video & audio from a prompt"}
+            {name || email ? `Welcome back, ${name || email}` : "Generate images, video & audio from a prompt"}
           </p>
         </div>
         <button
           onClick={() => setShowProfile((v) => !v)}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-            email || name
-              ? "border-indigo-700 text-indigo-300 hover:bg-indigo-950/40"
-              : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            email || name ? `border-zinc-700 ${theme.text} hover:bg-zinc-800` : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
           }`}
-          title="Your profile (remembered on this device)"
+          title="Your profile & appearance"
         >
           <User className="h-3.5 w-3.5" />
           {email || name ? "Profile" : "Sign in"}
@@ -412,24 +668,22 @@ export default function StudioPage() {
         <button
           onClick={() => setShowKey((v) => !v)}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-            token.trim()
-              ? "border-emerald-700 text-emerald-300 hover:bg-emerald-950/40"
-              : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            token.trim() ? "border-emerald-700 text-emerald-300 hover:bg-emerald-950/40" : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
           }`}
-          title="Set your Replicate API key (needed for video & audio)"
+          title="Set your Replicate API key (optional — only for pro video & audio)"
         >
           <KeyRound className="h-3.5 w-3.5" />
           {token.trim() ? "Key set" : "API key"}
         </button>
       </header>
 
-      {/* Profile panel — remembered locally in this browser */}
+      {/* Profile & appearance */}
       {showProfile && (
         <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
           <label className="mb-1 block text-xs font-medium text-zinc-300">Your profile</label>
           <p className="mb-3 text-xs text-zinc-500">
-            Saved only in this browser — no account, no password. It personalizes the app and
-            sits alongside your API key and gallery (which are also kept on this device).
+            Saved only in this browser — no account, no password. Personalizes the app and sits alongside your
+            gallery and API key.
           </p>
           <div className="space-y-2">
             <input
@@ -446,11 +700,25 @@ export default function StudioPage() {
               className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
             />
           </div>
+          <div className="mt-3">
+            <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-zinc-300">
+              <Palette className="h-3.5 w-3.5" /> Accent
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {ACCENT_THEMES.map((a) => (
+                <button
+                  key={a.value}
+                  onClick={() => chooseAccent(a.value)}
+                  title={a.label}
+                  className={`h-7 w-7 rounded-full bg-gradient-to-br ${a.gradient} ring-2 ring-offset-2 ring-offset-zinc-900 ${
+                    accent === a.value ? "ring-white" : "ring-transparent"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
           <div className="mt-3 flex gap-2">
-            <button
-              onClick={persistProfile}
-              className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
-            >
+            <button onClick={persistProfile} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
               Save
             </button>
             {(email || name) && (
@@ -459,6 +727,7 @@ export default function StudioPage() {
                   setName("");
                   setEmail("");
                   persistSettings({ name: "", email: "" });
+                  toast("Profile cleared");
                 }}
                 className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
               >
@@ -472,18 +741,14 @@ export default function StudioPage() {
       {/* API key panel */}
       {showKey && (
         <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <label className="mb-1 block text-xs font-medium text-zinc-300">Replicate API token</label>
+          <label className="mb-1 block text-xs font-medium text-zinc-300">Replicate API token (optional)</label>
           <p className="mb-2 text-xs text-zinc-500">
-            Needed for video &amp; audio only — images are free. Get one at{" "}
-            <a
-              href="https://replicate.com/account/api-tokens"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-400 underline"
-            >
+            Only needed for the <strong>pro</strong> video/audio models (they cost credit). Images and the free
+            in-browser video engine need nothing. Get a token at{" "}
+            <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer" className="text-indigo-400 underline">
               replicate.com/account/api-tokens
             </a>
-            . Stored only in this browser and sent with your requests.
+            . Stored only in this browser.
           </p>
           <div className="flex gap-2">
             <input
@@ -493,10 +758,7 @@ export default function StudioPage() {
               placeholder="r8_..."
               className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
             />
-            <button
-              onClick={persistToken}
-              className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
-            >
+            <button onClick={persistToken} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
               Save
             </button>
             {token.trim() && (
@@ -504,6 +766,7 @@ export default function StudioPage() {
                 onClick={() => {
                   setToken("");
                   persistSettings({ replicateToken: "" });
+                  toast("API key cleared");
                 }}
                 className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
               >
@@ -527,7 +790,7 @@ export default function StudioPage() {
         </button>
       </div>
 
-      {/* Prompt box */}
+      {/* Composer */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
         <textarea
           value={prompt}
@@ -538,31 +801,74 @@ export default function StudioPage() {
               ? "Describe the image you want to create…"
               : mode === "video"
                 ? videoImage
-                  ? "Describe how the image should move or animate…"
-                  : "Describe the video scene — or add an image below to animate it…"
+                  ? "Describe how the image should move (or just pick a motion below)…"
+                  : "Describe the scene — the free engine turns it into a looping motion video…"
                 : "Describe the music, ambience or sound you want…"
           }
           rows={3}
           className="w-full resize-none bg-transparent text-base text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
         />
 
-        {/* Image-to-video: attach a still to animate */}
+        {/* Prompt tools */}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setPrompt((p) => enhancePrompt(p) || p)}
+            disabled={!prompt.trim()}
+            className="inline-flex items-center gap-1 rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-40"
+            title="Add quality boosters to your prompt"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Enhance
+          </button>
+          <button
+            onClick={() => setPrompt(randomPrompt())}
+            className="inline-flex items-center gap-1 rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:border-zinc-500"
+            title="Surprise me with a random idea"
+          >
+            <Shuffle className="h-3.5 w-3.5" /> Surprise me
+          </button>
+          {prompt && (
+            <button
+              onClick={() => setPrompt("")}
+              className="inline-flex items-center gap-1 rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:text-red-400"
+            >
+              <X className="h-3.5 w-3.5" /> Clear
+            </button>
+          )}
+        </div>
+
+        {/* Video engine toggle */}
+        {mode === "video" && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2">
+            <span className="px-1 text-xs text-zinc-500">Engine</span>
+            <button
+              onClick={() => setVideoEngine("free")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium ${videoEngine === "free" ? `${theme.solid} text-white` : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              Free (in-browser)
+            </button>
+            <button
+              onClick={() => setVideoEngine("pro")}
+              className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${videoEngine === "pro" ? `${theme.solid} text-white` : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              <Film className="h-3.5 w-3.5" /> Pro (Replicate)
+            </button>
+            <span className="ml-auto px-1 text-[11px] text-zinc-500">
+              {videoEngine === "free" ? "No key needed · loops + export" : "Needs Replicate credit"}
+            </span>
+          </div>
+        )}
+
+        {/* Image-to-video / animate: attach a still */}
         {mode === "video" && (
           <div className="mt-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={onPickImage}
-              className="hidden"
-            />
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={onPickImage} className="hidden" />
             {videoImage ? (
               <div className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-900/60 p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={videoImage} alt="source" className="h-14 w-14 rounded-md object-cover" />
                 <div className="flex-1 text-xs text-zinc-400">
                   <p className="font-medium text-zinc-200">Image attached</p>
-                  <p>It will be animated using your prompt above.</p>
+                  <p>{videoEngine === "free" ? "It will be animated with the motion below." : "It will be animated by the prompt above."}</p>
                 </div>
                 <button
                   onClick={() => setVideoImage(null)}
@@ -577,13 +883,31 @@ export default function StudioPage() {
                 onClick={() => fileInputRef.current?.click()}
                 className="inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
               >
-                <ImagePlus className="h-4 w-4" /> Add an image to animate (image → video)
+                <ImagePlus className="h-4 w-4" /> Add an image to animate (optional)
               </button>
             )}
           </div>
         )}
 
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        {/* Style presets (image + free video) */}
+        {(mode === "image" || (mode === "video" && videoEngine === "free")) && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {STYLE_PRESETS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setStyle(s.id)}
+                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                  style === s.id ? `${theme.solid} text-white` : "border border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Prompt ideas + recents */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
           {PROMPT_IDEAS[mode].map((idea) => (
             <button
               key={idea}
@@ -594,10 +918,24 @@ export default function StudioPage() {
             </button>
           ))}
         </div>
+        {recentPrompts.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-zinc-600">Recent:</span>
+            {recentPrompts.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPrompt(p)}
+                className="rounded-full bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                {p.length > 28 ? p.slice(0, 28) + "…" : p}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Options */}
+        {/* Options row */}
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-4">
-          {(mode === "image" || (mode === "video" && !videoImage)) && (
+          {showAspect && (
             <label className="flex items-center gap-2 text-xs text-zinc-400">
               Aspect
               <select
@@ -615,20 +953,91 @@ export default function StudioPage() {
           )}
 
           {mode === "image" && (
-            <label className="flex items-center gap-2 text-xs text-zinc-400">
-              Style
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value as ImageModel)}
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+            <>
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                Model
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value as ImageModel)}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                >
+                  {IMAGE_MODELS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                Count
+                <select
+                  value={batch}
+                  onChange={(e) => setBatch(Number(e.target.value))}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n} {n === 1 ? "image" : "images"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="text-xs text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
               >
-                {IMAGE_MODELS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {showAdvanced ? "Hide advanced" : "Advanced"}
+              </button>
+            </>
+          )}
+
+          {mode === "video" && videoEngine === "free" && (
+            <>
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                Motion
+                <select
+                  value={motion}
+                  onChange={(e) => setMotion(e.target.value as Motion)}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                >
+                  {MOTION_PRESETS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                Length
+                <select
+                  value={videoDuration}
+                  onChange={(e) => setVideoDuration(Number(e.target.value) as VideoDuration)}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                >
+                  {VIDEO_DURATIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}s
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {motion === "morph" && !videoImage && (
+                <label className="flex items-center gap-2 text-xs text-zinc-400">
+                  Frames
+                  <select
+                    value={frames}
+                    onChange={(e) => setFrames(Number(e.target.value))}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                  >
+                    {[2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </>
           )}
 
           {mode === "audio" && (
@@ -666,13 +1075,46 @@ export default function StudioPage() {
 
           <button
             onClick={generate}
-            disabled={busy || !prompt.trim()}
-            className="ml-auto inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={busy}
+            className={`ml-auto inline-flex items-center gap-2 rounded-lg bg-gradient-to-br ${theme.gradient} px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40`}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
             {busy ? "Working…" : "Generate"}
           </button>
         </div>
+
+        {/* Advanced (image): negative prompt + seed */}
+        {mode === "image" && showAdvanced && (
+          <div className="mt-3 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Negative prompt (what to avoid)</label>
+              <input
+                value={negative}
+                onChange={(e) => setNegative(e.target.value)}
+                placeholder="blurry, text, watermark, extra fingers…"
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                Seed
+                <input
+                  value={seedInput}
+                  onChange={(e) => setSeedInput(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="random"
+                  className="w-28 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                <input type="checkbox" checked={lockSeed} onChange={(e) => setLockSeed(e.target.checked)} className="accent-indigo-500" />
+                Lock seed (reproducible)
+              </label>
+              <button onClick={() => setSeedInput(String(Math.floor(Math.random() * 1_000_000_000)))} className="text-xs text-zinc-500 hover:text-zinc-300">
+                Randomize
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {status && (
@@ -681,39 +1123,76 @@ export default function StudioPage() {
         </p>
       )}
       {error && (
-        <p className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">
-          {error}
-        </p>
+        <p className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</p>
       )}
 
       {/* Gallery */}
       <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-zinc-300">
-            Your creations {gallery.length > 0 && `(${gallery.length})`}
+            Your creations {gallery.length > 0 && `(${gallery.length}${favCount ? ` · ${favCount}★` : ""})`}
           </h2>
-          {gallery.length > 0 && (
-            <button
-              onClick={() => setGallery(clearGallery())}
-              className="text-xs text-zinc-500 hover:text-red-400"
-            >
-              Clear all
+          <div className="flex items-center gap-3">
+            <input ref={importInputRef} type="file" accept="application/json" onChange={onImportGallery} className="hidden" />
+            {gallery.length > 0 && (
+              <button onClick={doExportGallery} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300" title="Export gallery as JSON">
+                <Download className="h-3.5 w-3.5" /> Export
+              </button>
+            )}
+            <button onClick={() => importInputRef.current?.click()} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300" title="Import a gallery export">
+              <Upload className="h-3.5 w-3.5" /> Import
             </button>
-          )}
+            {gallery.length > 0 && (
+              <button
+                onClick={() => {
+                  if (typeof window !== "undefined" && window.confirm("Clear all creations? This can't be undone.")) {
+                    setGallery(clearGallery());
+                    toast("Gallery cleared");
+                  }
+                }}
+                className="text-xs text-zinc-500 hover:text-red-400"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Filters + search */}
+        {gallery.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {(["all", "image", "video", "audio", "favorites"] as Filter[]).map((f) => (
+              <button key={f} onClick={() => setFilter(f)} className={filterBtn(filter === f)}>
+                {f === "favorites" ? "★ Favorites" : f[0].toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+            <div className="relative ml-auto">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search prompts…"
+                className="w-44 rounded-full border border-zinc-700 bg-zinc-900 py-1.5 pl-8 pr-3 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
 
         {gallery.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-800 py-16 text-center text-sm text-zinc-500">
             Nothing yet — write a prompt above and hit Generate.
           </div>
+        ) : visible.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-800 py-16 text-center text-sm text-zinc-500">
+            No creations match your filter.
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {gallery.map((c) => (
-              <figure
-                key={c.id}
-                className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60"
-              >
-                {c.mode === "video" ? (
+            {visible.map((c) => (
+              <figure key={c.id} className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60">
+                {c.mode === "video" && c.source === "free" && c.images?.length ? (
+                  <CanvasVideo images={c.images} motion={c.motion ?? "kenburns"} durationMs={c.durationMs ?? 4000} ratio={c.ratio} fps={c.fps ?? 30} onToast={toast} />
+                ) : c.mode === "video" ? (
                   // eslint-disable-next-line jsx-a11y/media-has-caption
                   <video src={c.url} controls loop className="aspect-video w-full bg-black object-cover" />
                 ) : c.mode === "audio" ? (
@@ -723,47 +1202,96 @@ export default function StudioPage() {
                     <audio src={c.url} controls className="w-full" />
                   </div>
                 ) : (
-                  <ImageTile url={c.url} alt={c.prompt} />
+                  <ImageTile url={c.url} alt={c.prompt} onOpen={() => setLightbox(c)} />
                 )}
-                <figcaption className="flex items-start gap-2 p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-xs text-zinc-400">{c.prompt}</p>
-                    {c.author && (
-                      <p className="mt-1 truncate text-[11px] text-zinc-600">by {c.author}</p>
-                    )}
-                  </div>
-                  {c.mode === "image" && (
+
+                <figcaption className="p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-xs text-zinc-400">{c.prompt}</p>
+                      {c.author && <p className="mt-1 truncate text-[11px] text-zinc-600">by {c.author}</p>}
+                    </div>
                     <button
-                      onClick={() => animateFromGallery(c.url)}
-                      className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-indigo-300"
-                      title="Animate this image into a video"
+                      onClick={() => setGallery(toggleFavorite(c.id))}
+                      className={`shrink-0 rounded-md p-1.5 hover:bg-zinc-800 ${c.favorite ? "text-rose-400" : "text-zinc-500 hover:text-rose-300"}`}
+                      title={c.favorite ? "Unfavorite" : "Favorite"}
                     >
-                      <Clapperboard className="h-4 w-4" />
+                      <Heart className={`h-4 w-4 ${c.favorite ? "fill-current" : ""}`} />
                     </button>
-                  )}
-                  <a
-                    href={c.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    download
-                    className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-                    title="Open / download"
-                  >
-                    <Download className="h-4 w-4" />
-                  </a>
-                  <button
-                    onClick={() => setGallery(removeCreation(c.id))}
-                    className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    {c.mode === "image" && (
+                      <button onClick={() => animateFromGallery(c)} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-indigo-300" title="Animate into a video">
+                        <Clapperboard className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button onClick={() => remix(c)} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Remix (load settings)">
+                      <Repeat2 className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => copyText(c.prompt, "Prompt", `p-${c.id}`)} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Copy prompt">
+                      {copied === `p-${c.id}` ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                    {c.url && (
+                      <button onClick={() => shareCreation(c)} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Share">
+                        <Share2 className="h-4 w-4" />
+                      </button>
+                    )}
+                    {c.url && (
+                      <a href={c.url} target="_blank" rel="noreferrer" download className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Open / download">
+                        <Download className="h-4 w-4" />
+                      </a>
+                    )}
+                    {c.mode === "image" && (
+                      <button onClick={() => setLightbox(c)} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="View fullscreen">
+                        <Maximize2 className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button onClick={() => setGallery(removeCreation(c.id))} className="ml-auto rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-400" title="Delete">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </figcaption>
               </figure>
             ))}
           </div>
         )}
       </section>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/90 p-4 backdrop-blur" onClick={() => setLightbox(null)}>
+          <div className="flex justify-end">
+            <button onClick={() => setLightbox(null)} className="rounded-full bg-zinc-800/80 p-2 text-zinc-200 hover:bg-zinc-700">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex flex-1 items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightbox.url} alt={lightbox.prompt} className="max-h-full max-w-full rounded-lg object-contain" />
+          </div>
+          <div className="mx-auto mt-3 flex max-w-2xl flex-wrap items-center justify-center gap-3 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="w-full text-sm text-zinc-300">{lightbox.prompt}</p>
+            <button onClick={() => remix(lightbox)} className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">
+              <Repeat2 className="h-3.5 w-3.5" /> Remix
+            </button>
+            <button onClick={() => animateFromGallery(lightbox)} className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">
+              <Clapperboard className="h-3.5 w-3.5" /> Animate
+            </button>
+            <a href={lightbox.url} target="_blank" rel="noreferrer" download className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">
+              <Download className="h-3.5 w-3.5" /> Download
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Toasts */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4">
+        {toasts.map((t) => (
+          <div key={t.id} className="pointer-events-auto max-w-sm rounded-full bg-zinc-800/95 px-4 py-2 text-center text-sm text-zinc-100 shadow-lg ring-1 ring-white/10">
+            {t.msg}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
