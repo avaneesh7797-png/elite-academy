@@ -56,6 +56,9 @@ export type GenerateRequest = {
   seed?: number;
   audioStyle?: AudioStyle;
   duration?: AudioDuration;
+  // Optional source image for video mode → image-to-video. Either a remote URL
+  // (e.g. an image generated in the app) or a data: URI from an uploaded file.
+  image?: string;
 };
 
 // What the API returns for an image request.

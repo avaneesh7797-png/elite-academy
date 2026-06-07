@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Clapperboard,
   Download,
   ImageIcon,
+  ImagePlus,
   KeyRound,
   Loader2,
   Music,
@@ -11,6 +13,7 @@ import {
   Trash2,
   Video,
   Wand2,
+  X,
 } from "lucide-react";
 import {
   ASPECT_RATIOS,
@@ -55,6 +58,40 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Read an uploaded file and downscale it to a compact JPEG data URI so the
+// upload stays well under serverless body limits before going to Replicate.
+async function fileToDataUrl(file: File, max = 1024, quality = 0.85): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result as string);
+    fr.onerror = () => reject(new Error("read failed"));
+    fr.readAsDataURL(file);
+  });
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new window.Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("decode failed"));
+      i.src = dataUrl;
+    });
+    let { width, height } = img;
+    if (width > max || height > max) {
+      const scale = max / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return dataUrl;
+  }
+}
+
 export default function StudioPage() {
   const [mode, setMode] = useState<StudioMode>("image");
   const [prompt, setPrompt] = useState("");
@@ -68,6 +105,9 @@ export default function StudioPage() {
   const [gallery, setGallery] = useState<Creation[]>([]);
   const [token, setToken] = useState("");
   const [showKey, setShowKey] = useState(false);
+  // Source still for image-to-video (data URI from upload, or a gallery image URL).
+  const [videoImage, setVideoImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -91,6 +131,25 @@ export default function StudioPage() {
   function persistToken() {
     saveSettings({ replicateToken: token.trim() });
     setShowKey(false);
+  }
+
+  async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    try {
+      setVideoImage(await fileToDataUrl(file));
+    } catch {
+      setError("Could not read that image.");
+    }
+  }
+
+  // Send an image you already generated straight into the Video tab to animate it.
+  function animateFromGallery(url: string) {
+    setVideoImage(url);
+    setMode("video");
+    setError("");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const pollJob = useCallback(
@@ -153,7 +212,15 @@ export default function StudioPage() {
       const res = await fetch("/api/studio/generate", {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ mode, prompt: trimmed, ratio, model, audioStyle, duration }),
+        body: JSON.stringify({
+          mode,
+          prompt: trimmed,
+          ratio,
+          model,
+          audioStyle,
+          duration,
+          image: mode === "video" ? videoImage ?? undefined : undefined,
+        }),
       });
       const data = await res.json();
 
@@ -311,12 +378,51 @@ export default function StudioPage() {
             mode === "image"
               ? "Describe the image you want to create…"
               : mode === "video"
-                ? "Describe the video scene you want to render…"
+                ? videoImage
+                  ? "Describe how the image should move or animate…"
+                  : "Describe the video scene — or add an image below to animate it…"
                 : "Describe the music, ambience or sound you want…"
           }
           rows={3}
           className="w-full resize-none bg-transparent text-base text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
         />
+
+        {/* Image-to-video: attach a still to animate */}
+        {mode === "video" && (
+          <div className="mt-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={onPickImage}
+              className="hidden"
+            />
+            {videoImage ? (
+              <div className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-900/60 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={videoImage} alt="source" className="h-14 w-14 rounded-md object-cover" />
+                <div className="flex-1 text-xs text-zinc-400">
+                  <p className="font-medium text-zinc-200">Image attached</p>
+                  <p>It will be animated using your prompt above.</p>
+                </div>
+                <button
+                  onClick={() => setVideoImage(null)}
+                  className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-red-400"
+                  title="Remove image"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+              >
+                <ImagePlus className="h-4 w-4" /> Add an image to animate (image → video)
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="mt-2 flex flex-wrap gap-1.5">
           {PROMPT_IDEAS[mode].map((idea) => (
@@ -332,7 +438,7 @@ export default function StudioPage() {
 
         {/* Options */}
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-4">
-          {mode !== "audio" && (
+          {(mode === "image" || (mode === "video" && !videoImage)) && (
             <label className="flex items-center gap-2 text-xs text-zinc-400">
               Aspect
               <select
@@ -463,6 +569,15 @@ export default function StudioPage() {
                 )}
                 <figcaption className="flex items-start gap-2 p-3">
                   <p className="line-clamp-2 flex-1 text-xs text-zinc-400">{c.prompt}</p>
+                  {c.mode === "image" && (
+                    <button
+                      onClick={() => animateFromGallery(c.url)}
+                      className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-indigo-300"
+                      title="Animate this image into a video"
+                    >
+                      <Clapperboard className="h-4 w-4" />
+                    </button>
+                  )}
                   <a
                     href={c.url}
                     target="_blank"
