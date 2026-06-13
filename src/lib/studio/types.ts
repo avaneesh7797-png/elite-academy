@@ -9,20 +9,24 @@ export type ImageModel = "flux" | "flux-realism" | "flux-anime" | "flux-3d" | "t
 
 export type AudioStyle = "music" | "ambience" | "soundfx" | "speech";
 
+// Sizes are kept modest on purpose: smaller images generate faster on the free
+// service and download quickly on mobile data (reliability > raw resolution).
 export const ASPECT_RATIOS: { value: AspectRatio; label: string; w: number; h: number }[] = [
-  { value: "1:1", label: "Square 1:1", w: 1024, h: 1024 },
-  { value: "16:9", label: "Wide 16:9", w: 1280, h: 720 },
-  { value: "9:16", label: "Portrait 9:16", w: 720, h: 1280 },
-  { value: "4:3", label: "Standard 4:3", w: 1024, h: 768 },
-  { value: "3:4", label: "Tall 3:4", w: 768, h: 1024 },
+  { value: "1:1", label: "Square 1:1", w: 768, h: 768 },
+  { value: "16:9", label: "Wide 16:9", w: 896, h: 504 },
+  { value: "9:16", label: "Portrait 9:16", w: 504, h: 896 },
+  { value: "4:3", label: "Standard 4:3", w: 864, h: 648 },
+  { value: "3:4", label: "Tall 3:4", w: 648, h: 864 },
 ];
 
+// Turbo first: it's the fast, reliable default. Flux looks best but is slower
+// and more prone to timing out under load.
 export const IMAGE_MODELS: { value: ImageModel; label: string }[] = [
-  { value: "flux", label: "Flux (balanced)" },
-  { value: "flux-realism", label: "Flux Realism" },
-  { value: "flux-anime", label: "Flux Anime" },
-  { value: "flux-3d", label: "Flux 3D" },
-  { value: "turbo", label: "Turbo (fast)" },
+  { value: "turbo", label: "Turbo (fast — recommended)" },
+  { value: "flux", label: "Flux (best quality, slower)" },
+  { value: "flux-realism", label: "Flux Realism (slower)" },
+  { value: "flux-anime", label: "Flux Anime (slower)" },
+  { value: "flux-3d", label: "Flux 3D (slower)" },
 ];
 
 // Audio "styles" tweak the prompt sent to the model so one text-to-audio
