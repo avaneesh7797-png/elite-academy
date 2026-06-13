@@ -1,61 +1,30 @@
-// Studio service worker — caches the app shell so it opens fast and works
-// offline (the localStorage gallery is available offline; new generations need
-// the network). Scoped to /studio.
-const CACHE = "studio-shell-v1";
-const SHELL = ["/studio", "/studio-icon.svg", "/studio-manifest.webmanifest"];
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).catch(() => undefined),
-  );
+// Service worker KILL-SWITCH.
+//
+// The earlier caching service worker was serving a stale app shell on mobile
+// (old JS kept running after deploys). A generation app needs the network
+// anyway, so we remove the SW entirely: this version caches nothing, clears all
+// old caches, and unregisters itself. Browsers revalidate the SW script on
+// navigation, so this runs automatically on the next visit and self-destructs.
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
-    ),
-  );
-  self.clients.claim();
-});
-
-self.addEventListener("fetch", (event) => {
-  const req = event.request;
-  if (req.method !== "GET") return;
-  const url = new URL(req.url);
-
-  // Never cache the generation API or cross-origin media (Pollinations/Replicate).
-  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
-
-  // Navigations: network-first, fall back to the cached shell when offline.
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put("/studio", copy)).catch(() => undefined);
-          return res;
-        })
-        .catch(() => caches.match("/studio").then((r) => r || caches.match(req))),
-    );
-    return;
-  }
-
-  // Same-origin assets: cache-first, then network.
-  event.respondWith(
-    caches.match(req).then(
-      (cached) =>
-        cached ||
-        fetch(req)
-          .then((res) => {
-            if (res && res.status === 200) {
-              const copy = res.clone();
-              caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => undefined);
-            }
-            return res;
-          })
-          .catch(() => cached),
-    ),
+    (async () => {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      } catch {
+        /* ignore */
+      }
+      try {
+        await self.registration.unregister();
+      } catch {
+        /* ignore */
+      }
+    })(),
   );
 });
+
+// No fetch handler — every request goes straight to the network (always fresh).
