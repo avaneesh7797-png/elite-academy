@@ -44,17 +44,19 @@ function tokenFrom(req: NextRequest): string | undefined {
   return header || process.env.REPLICATE_API_TOKEN || undefined;
 }
 
+// Point the browser at our own image proxy (/api/studio/image), which fetches
+// from the upstream service server-side with timeouts + model fallback. Same
+// origin → no cross-origin stalls on mobile.
 function buildImageUrl(prompt: string, ratio: string, model: string, seed: number): string {
   const { w, h } = dimensionsFor(ratio as never);
   const params = new URLSearchParams({
-    width: String(w),
-    height: String(h),
+    prompt,
+    w: String(w),
+    h: String(h),
     seed: String(seed),
     model,
-    nologo: "true",
-    referrer: "elite-studio",
   });
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
+  return `/api/studio/image?${params.toString()}`;
 }
 
 function extractMediaUrl(output: unknown): string | undefined {

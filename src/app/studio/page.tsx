@@ -89,22 +89,41 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Build a faster "lighter" variant of a Pollinations URL (force the Turbo model
-// and a smaller size) to use as a last-resort fallback when the original stalls.
+// Last-resort fallback when an image stalls. Our primary URL is the same-origin
+// proxy (/api/studio/image); if that fails we hit the upstream service directly
+// (a different network path, with no serverless timeout). For an already-direct
+// upstream URL we just force a faster Turbo + smaller variant.
 function lightenUrl(url: string): string | null {
   try {
-    const u = new URL(url);
-    if (!u.hostname.includes("pollinations")) return null;
-    if (u.searchParams.get("model") === "turbo" && Number(u.searchParams.get("width") || "9999") <= 640) {
-      return null; // already as light as it gets
+    const base = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+    const u = new URL(url, base);
+
+    if (u.pathname.startsWith("/api/studio/image")) {
+      const prompt = u.searchParams.get("prompt") || "";
+      if (!prompt) return null;
+      const seed = u.searchParams.get("seed") || String(Math.floor(Math.random() * 1_000_000_000));
+      const w0 = Number(u.searchParams.get("w") || "768");
+      const h0 = Number(u.searchParams.get("h") || "768");
+      const nw = Math.min(640, w0);
+      const nh = Math.max(1, Math.round((h0 * nw) / w0));
+      const p = new URLSearchParams({ width: String(nw), height: String(nh), seed, model: "turbo", nologo: "true" });
+      return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${p.toString()}`;
     }
-    u.searchParams.set("model", "turbo");
-    const w = Number(u.searchParams.get("width") || "768");
-    const h = Number(u.searchParams.get("height") || "768");
-    const nw = Math.min(640, w);
-    u.searchParams.set("width", String(nw));
-    u.searchParams.set("height", String(Math.max(1, Math.round((h * nw) / w))));
-    return u.toString();
+
+    if (u.hostname.includes("pollinations")) {
+      if (u.searchParams.get("model") === "turbo" && Number(u.searchParams.get("width") || "9999") <= 640) {
+        return null; // already as light as it gets
+      }
+      u.searchParams.set("model", "turbo");
+      const w = Number(u.searchParams.get("width") || "768");
+      const h = Number(u.searchParams.get("height") || "768");
+      const nw = Math.min(640, w);
+      u.searchParams.set("width", String(nw));
+      u.searchParams.set("height", String(Math.max(1, Math.round((h * nw) / w))));
+      return u.toString();
+    }
+
+    return null;
   } catch {
     return null;
   }
