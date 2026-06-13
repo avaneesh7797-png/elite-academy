@@ -107,6 +107,8 @@ function lightenUrl(url: string): string | null {
       const nw = Math.min(640, w0);
       const nh = Math.max(1, Math.round((h0 * nw) / w0));
       const p = new URLSearchParams({ width: String(nw), height: String(nh), seed, model: "turbo", nologo: "true" });
+      const k = u.searchParams.get("k");
+      if (k) p.set("token", k);
       return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${p.toString()}`;
     }
 
@@ -282,6 +284,7 @@ export default function StudioPage() {
   const [lightbox, setLightbox] = useState<Creation | null>(null);
 
   const [token, setToken] = useState("");
+  const [pollToken, setPollToken] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -301,6 +304,7 @@ export default function StudioPage() {
     setGallery(loadGallery());
     const s = loadSettings();
     setToken(s.replicateToken);
+    setPollToken(s.pollinationsToken);
     setName(s.name);
     setEmail(s.email);
     setAccent(s.accent || "indigo");
@@ -316,9 +320,12 @@ export default function StudioPage() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }
 
-  function persistSettings(over: Partial<{ replicateToken: string; name: string; email: string; accent: string }> = {}) {
+  function persistSettings(
+    over: Partial<{ replicateToken: string; pollinationsToken: string; name: string; email: string; accent: string }> = {},
+  ) {
     saveSettings({
       replicateToken: token.trim(),
+      pollinationsToken: pollToken.trim(),
       name: name.trim(),
       email: email.trim(),
       accent,
@@ -329,13 +336,14 @@ export default function StudioPage() {
   const authHeaders = useCallback((): HeadersInit => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
     if (token.trim()) h["x-studio-key"] = token.trim();
+    if (pollToken.trim()) h["x-pollinations-key"] = pollToken.trim();
     return h;
-  }, [token]);
+  }, [token, pollToken]);
 
   function persistToken() {
-    persistSettings({ replicateToken: token.trim() });
+    persistSettings({ replicateToken: token.trim(), pollinationsToken: pollToken.trim() });
     setShowKey(false);
-    toast(token.trim() ? "API key saved ✓" : "API key cleared");
+    toast("Keys saved ✓");
   }
 
   function persistProfile() {
@@ -810,40 +818,80 @@ export default function StudioPage() {
 
       {/* API key panel */}
       {showKey && (
-        <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <label className="mb-1 block text-xs font-medium text-zinc-300">Replicate API token (optional)</label>
-          <p className="mb-2 text-xs text-zinc-500">
-            Only needed for the <strong>pro</strong> video/audio models (they cost credit). Images and the free
-            in-browser video engine need nothing. Get a token at{" "}
-            <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer" className="text-indigo-400 underline">
-              replicate.com/account/api-tokens
-            </a>
-            . Stored only in this browser.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="r8_..."
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
-            />
-            <button onClick={persistToken} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
-              Save
-            </button>
-            {token.trim() && (
-              <button
-                onClick={() => {
-                  setToken("");
-                  persistSettings({ replicateToken: "" });
-                  toast("API key cleared");
-                }}
-                className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
-              >
-                Clear
-              </button>
-            )}
+        <div className="mb-4 space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+          {/* Pollinations token — free, fixes image rate limits */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
+              Pollinations token <span className="text-emerald-400">(free — for reliable images)</span>
+            </label>
+            <p className="mb-2 text-xs text-zinc-500">
+              The free image service now rate-limits anonymous use (1 at a time). A free token removes that. Sign in
+              at{" "}
+              <a href="https://auth.pollinations.ai" target="_blank" rel="noreferrer" className="text-indigo-400 underline">
+                auth.pollinations.ai
+              </a>{" "}
+              and paste the token here. Stored only in this browser.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={pollToken}
+                onChange={(e) => setPollToken(e.target.value)}
+                placeholder="pollinations token…"
+                className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+              />
+              {pollToken.trim() && (
+                <button
+                  onClick={() => {
+                    setPollToken("");
+                    persistSettings({ pollinationsToken: "" });
+                    toast("Pollinations token cleared");
+                  }}
+                  className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Replicate token — paid, for pro video/audio */}
+          <div className="border-t border-zinc-800 pt-3">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">Replicate API token (optional, paid)</label>
+            <p className="mb-2 text-xs text-zinc-500">
+              Only for the <strong>pro</strong> video/audio models (they cost credit). Images and the free
+              in-browser video engine don&apos;t need this. Get one at{" "}
+              <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer" className="text-indigo-400 underline">
+                replicate.com/account/api-tokens
+              </a>
+              .
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="r8_..."
+                className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+              />
+              {token.trim() && (
+                <button
+                  onClick={() => {
+                    setToken("");
+                    persistSettings({ replicateToken: "" });
+                    toast("Replicate key cleared");
+                  }}
+                  className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          <button onClick={persistToken} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
+            Save keys
+          </button>
         </div>
       )}
 
@@ -1194,6 +1242,15 @@ export default function StudioPage() {
       )}
       {error && (
         <p className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</p>
+      )}
+      {(mode === "image" || (mode === "video" && videoEngine === "free")) && !pollToken.trim() && (
+        <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
+          Heads up: the free image service now rate-limits anonymous use, so images can be slow or fail.{" "}
+          <button onClick={() => setShowKey(true)} className="underline underline-offset-2">
+            Add a free Pollinations token
+          </button>{" "}
+          for fast, reliable images.
+        </p>
       )}
 
       {/* Gallery */}

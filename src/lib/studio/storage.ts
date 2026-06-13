@@ -117,12 +117,19 @@ export function importGalleryJSON(json: string): Creation[] {
 
 export type StudioSettings = {
   replicateToken: string;
+  pollinationsToken: string; // free token for unlimited images (auth.pollinations.ai)
   name: string;
   email: string;
   accent: string;
 };
 
-const EMPTY_SETTINGS: StudioSettings = { replicateToken: "", name: "", email: "", accent: "indigo" };
+const EMPTY_SETTINGS: StudioSettings = {
+  replicateToken: "",
+  pollinationsToken: "",
+  name: "",
+  email: "",
+  accent: "indigo",
+};
 
 export function loadSettings(): StudioSettings {
   if (typeof window === "undefined") return EMPTY_SETTINGS;
