@@ -89,12 +89,46 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Gallery image tile that tolerates slow / flaky Pollinations responses.
+// Build a faster "lighter" variant of a Pollinations URL (force the Turbo model
+// and a smaller size) to use as a last-resort fallback when the original stalls.
+function lightenUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes("pollinations")) return null;
+    if (u.searchParams.get("model") === "turbo" && Number(u.searchParams.get("width") || "9999") <= 640) {
+      return null; // already as light as it gets
+    }
+    u.searchParams.set("model", "turbo");
+    const w = Number(u.searchParams.get("width") || "768");
+    const h = Number(u.searchParams.get("height") || "768");
+    const nw = Math.min(640, w);
+    u.searchParams.set("width", String(nw));
+    u.searchParams.set("height", String(Math.max(1, Math.round((h * nw) / w))));
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+// Gallery image tile that tolerates slow / flaky Pollinations responses: retries
+// the same URL a few times, then automatically falls back to a faster Turbo +
+// smaller variant before offering a manual retry.
 function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: () => void }) {
+  const [src, setSrc] = useState(url);
   const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
+  const [triedFallback, setTriedFallback] = useState(false);
   const retrying = state === "error" && attempt < 3;
 
+  // Reset when the underlying creation URL changes.
+  useEffect(() => {
+    setSrc(url);
+    setState("loading");
+    setAttempt(0);
+    setTriedFallback(false);
+  }, [url]);
+
+  // Auto-retry the same URL (remounts via key → Pollinations cache hit).
   useEffect(() => {
     if (!retrying) return;
     const t = setTimeout(() => {
@@ -104,11 +138,24 @@ function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
     return () => clearTimeout(t);
   }, [retrying]);
 
+  // After retries are exhausted, switch to the faster Turbo fallback once.
+  useEffect(() => {
+    if (state !== "error" || attempt < 3 || triedFallback) return;
+    const fb = lightenUrl(src);
+    if (fb && fb !== src) {
+      setTriedFallback(true);
+      setSrc(fb);
+      setState("loading");
+      setAttempt(0);
+    }
+  }, [state, attempt, triedFallback, src]);
+
+  // Watchdog: a stalled request never fires onError, so cap the wait.
   useEffect(() => {
     if (state !== "loading") return;
-    const t = setTimeout(() => setState("error"), 30000);
+    const t = setTimeout(() => setState("error"), 25000);
     return () => clearTimeout(t);
-  }, [state, attempt]);
+  }, [state, attempt, src]);
 
   return (
     <div className="relative w-full">
@@ -117,11 +164,15 @@ function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
           {state === "loading" || retrying ? (
             <>
               <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-              <span className="text-[11px] text-zinc-600">{attempt > 0 ? "Retrying…" : "Generating…"}</span>
+              <span className="text-[11px] text-zinc-600">
+                {triedFallback ? "Trying a faster version…" : attempt > 0 ? "Retrying…" : "Generating…"}
+              </span>
             </>
           ) : (
             <button
               onClick={() => {
+                setSrc(url);
+                setTriedFallback(false);
                 setState("loading");
                 setAttempt((a) => a + 1);
               }}
@@ -134,8 +185,8 @@ function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        key={attempt}
-        src={url}
+        key={`${src}-${attempt}`}
+        src={src}
         alt={alt}
         loading="lazy"
         onLoad={() => setState("loaded")}
@@ -184,7 +235,7 @@ export default function StudioPage() {
   const [mode, setMode] = useState<StudioMode>("image");
   const [prompt, setPrompt] = useState("");
   const [ratio, setRatio] = useState<AspectRatio>("1:1");
-  const [model, setModel] = useState<ImageModel>("flux");
+  const [model, setModel] = useState<ImageModel>("turbo");
   const [style, setStyle] = useState("none");
   const [negative, setNegative] = useState("");
   const [batch, setBatch] = useState(1);
