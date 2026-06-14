@@ -295,6 +295,7 @@ export default function StudioPage() {
   const [toasts, setToasts] = useState<{ id: string; msg: string }[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [showHero, setShowHero] = useState(true);
+  const [diag, setDiag] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const heroFileRef = useRef<HTMLInputElement | null>(null);
@@ -952,9 +953,31 @@ export default function StudioPage() {
             </div>
           </div>
 
-          <button onClick={persistToken} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
-            Save keys
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={persistToken} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
+              Save keys
+            </button>
+            <button
+              onClick={async () => {
+                setDiag("Testing…");
+                try {
+                  const r = await fetch("/api/studio/image?prompt=a+red+apple&debug=1", { headers: authHeaders() });
+                  const j = await r.json();
+                  setDiag(JSON.stringify(j, null, 2));
+                } catch (e) {
+                  setDiag("Test failed: " + String(e));
+                }
+              }}
+              className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+            >
+              Test image service
+            </button>
+          </div>
+          {diag && (
+            <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-2 text-[11px] leading-snug text-zinc-300">
+              {diag}
+            </pre>
+          )}
         </div>
       )}
 
