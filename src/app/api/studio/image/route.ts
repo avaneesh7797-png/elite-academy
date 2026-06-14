@@ -23,7 +23,11 @@ function imageResponse(buf: ArrayBuffer, contentType: string): Response {
   });
 }
 
-// --- Provider 1: Hugging Face Inference API (FLUX) ---
+// --- Provider 1: Hugging Face Inference (FLUX / SDXL) ---
+// HF migrated serverless inference to router.huggingface.co; the legacy
+// api-inference host still answers for some models. Try the router first, then
+// legacy, across a couple of widely-available models, so a valid token works
+// regardless of which path/model HF is currently serving.
 async function tryHuggingFace(
   prompt: string,
   w: number,
@@ -32,12 +36,23 @@ async function tryHuggingFace(
   token: string,
   budgetMs: number,
 ): Promise<Response | null> {
-  const model = process.env.STUDIO_HF_MODEL || "black-forest-labs/FLUX.1-schnell";
-  const url = `https://api-inference.huggingface.co/models/${model}`;
-  const deadline = Date.now() + budgetMs;
-  let wait = 4000;
+  const models = [
+    process.env.STUDIO_HF_MODEL || "black-forest-labs/FLUX.1-schnell",
+    "stabilityai/stable-diffusion-xl-base-1.0",
+  ];
+  const bases = [
+    "https://router.huggingface.co/hf-inference/models",
+    "https://api-inference.huggingface.co/models",
+  ];
+  const combos: string[] = [];
+  for (const m of models) for (const b of bases) combos.push(`${b}/${m}`);
 
-  while (Date.now() < deadline) {
+  const deadline = Date.now() + budgetMs;
+  let ci = 0;
+  let warmups = 0;
+
+  while (Date.now() < deadline && ci < combos.length) {
+    const url = combos[ci];
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
     try {
@@ -49,27 +64,25 @@ async function tryHuggingFace(
           "Content-Type": "application/json",
           Accept: "image/png",
         },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: { width: w, height: h, seed },
-        }),
+        body: JSON.stringify({ inputs: prompt, parameters: { width: w, height: h, seed } }),
         cache: "no-store",
       });
       const ct = r.headers.get("content-type") || "";
       if (r.ok && ct.startsWith("image/")) {
         return imageResponse(await r.arrayBuffer(), ct);
       }
-      // 503 => model is warming up; wait and retry within budget.
-      if (r.status === 503) {
-        if (Date.now() + wait > deadline) return null;
-        await sleep(wait);
-        wait = Math.min(wait + 3000, 12000);
+      // 503 => model warming up: wait once or twice on this combo, then move on.
+      if (r.status === 503 && warmups < 2 && Date.now() + 6000 < deadline) {
+        warmups += 1;
+        await sleep(5000);
         continue;
       }
-      // 401/400/etc — token or request problem; don't burn the budget.
-      return null;
+      // Anything else (404 model not served here, 401, 400…) → try next combo.
+      ci += 1;
+      warmups = 0;
     } catch {
-      return null;
+      ci += 1;
+      warmups = 0;
     } finally {
       clearTimeout(to);
     }
