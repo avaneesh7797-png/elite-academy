@@ -47,7 +47,14 @@ function tokenFrom(req: NextRequest): string | undefined {
 // Point the browser at our own image proxy (/api/studio/image), which fetches
 // from the upstream service server-side with timeouts + model fallback. Same
 // origin → no cross-origin stalls on mobile.
-function buildImageUrl(prompt: string, ratio: string, model: string, seed: number, token?: string): string {
+function buildImageUrl(
+  prompt: string,
+  ratio: string,
+  model: string,
+  seed: number,
+  pollToken?: string,
+  hfToken?: string,
+): string {
   const { w, h } = dimensionsFor(ratio as never);
   const params = new URLSearchParams({
     prompt,
@@ -56,7 +63,8 @@ function buildImageUrl(prompt: string, ratio: string, model: string, seed: numbe
     seed: String(seed),
     model,
   });
-  if (token) params.set("k", token);
+  if (pollToken) params.set("k", pollToken);
+  if (hfToken) params.set("hf", hfToken);
   return `/api/studio/image?${params.toString()}`;
 }
 
@@ -129,7 +137,8 @@ export async function POST(req: NextRequest) {
     const ratio = parsed.ratio ?? "1:1";
     const seed = parsed.seed ?? Math.floor(Math.random() * 1_000_000_000);
     const pollToken = req.headers.get("x-pollinations-key")?.trim() || undefined;
-    const url = buildImageUrl(parsed.prompt, ratio, parsed.model ?? "turbo", seed, pollToken);
+    const hfToken = req.headers.get("x-hf-key")?.trim() || undefined;
+    const url = buildImageUrl(parsed.prompt, ratio, parsed.model ?? "turbo", seed, pollToken, hfToken);
     return NextResponse.json({ kind: "image", url, prompt: parsed.prompt, seed });
   }
 

@@ -118,6 +118,7 @@ export function importGalleryJSON(json: string): Creation[] {
 export type StudioSettings = {
   replicateToken: string;
   pollinationsToken: string; // free token for unlimited images (auth.pollinations.ai)
+  hfToken: string; // free Hugging Face token (huggingface.co/settings/tokens)
   name: string;
   email: string;
   accent: string;
@@ -126,6 +127,7 @@ export type StudioSettings = {
 const EMPTY_SETTINGS: StudioSettings = {
   replicateToken: "",
   pollinationsToken: "",
+  hfToken: "",
   name: "",
   email: "",
   accent: "indigo",
