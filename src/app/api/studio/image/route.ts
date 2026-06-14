@@ -179,6 +179,31 @@ export async function GET(req: NextRequest) {
   const pollToken =
     sp.get("k") || req.headers.get("x-pollinations-key") || process.env.POLLINATIONS_TOKEN || undefined;
 
+  // Diagnostic mode: append &debug=1 to see exactly what each provider returns.
+  if (sp.get("debug") === "1") {
+    const report: Record<string, unknown> = { hasHfToken: !!hfToken, hasPollToken: !!pollToken };
+    if (hfToken) {
+      const url = `https://router.huggingface.co/hf-inference/models/${process.env.STUDIO_HF_MODEL || "black-forest-labs/FLUX.1-schnell"}`;
+      try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 20000);
+        const r = await fetch(url, {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { Authorization: `Bearer ${hfToken}`, "Content-Type": "application/json", Accept: "image/png" },
+          body: JSON.stringify({ inputs: prompt }),
+          cache: "no-store",
+        });
+        clearTimeout(to);
+        const ct = r.headers.get("content-type") || "";
+        report.hf = { status: r.status, contentType: ct, body: ct.startsWith("image/") ? "(image ok)" : (await r.text()).slice(0, 400) };
+      } catch (e) {
+        report.hf = { error: String(e) };
+      }
+    }
+    return Response.json(report);
+  }
+
   // Prefer Hugging Face when a token is present (far more reliable than the
   // throttled free Pollinations tier), then fall back to Pollinations.
   if (hfToken) {
