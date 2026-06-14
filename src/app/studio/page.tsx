@@ -35,6 +35,7 @@ import {
   AUDIO_STYLES,
   IMAGE_MODELS,
   MOTION_PRESETS,
+  PRO_VIDEO_MODELS,
   STYLE_PRESETS,
   VIDEO_DURATIONS,
   accentTheme,
@@ -268,6 +269,7 @@ export default function StudioPage() {
 
   // Free in-browser video controls.
   const [videoEngine, setVideoEngine] = useState<"free" | "pro">("free");
+  const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
   const [frames, setFrames] = useState(3);
   const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
@@ -528,6 +530,7 @@ export default function StudioPage() {
           model,
           audioStyle,
           duration,
+          videoModel,
           image: mode === "video" ? videoImage ?? undefined : undefined,
         }),
       });
@@ -1236,6 +1239,23 @@ export default function StudioPage() {
                 {showAdvanced ? "Hide advanced" : "Advanced"}
               </button>
             </>
+          )}
+
+          {mode === "video" && videoEngine === "pro" && !videoImage && (
+            <label className="flex items-center gap-2 text-xs text-zinc-400">
+              Quality
+              <select
+                value={videoModel}
+                onChange={(e) => setVideoModel(e.target.value)}
+                className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+              >
+                {PRO_VIDEO_MODELS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
 
           {mode === "video" && videoEngine === "free" && (
