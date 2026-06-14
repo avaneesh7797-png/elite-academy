@@ -285,6 +285,7 @@ export default function StudioPage() {
 
   const [token, setToken] = useState("");
   const [pollToken, setPollToken] = useState("");
+  const [hfToken, setHfToken] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -305,6 +306,7 @@ export default function StudioPage() {
     const s = loadSettings();
     setToken(s.replicateToken);
     setPollToken(s.pollinationsToken);
+    setHfToken(s.hfToken);
     setName(s.name);
     setEmail(s.email);
     setAccent(s.accent || "indigo");
@@ -321,11 +323,19 @@ export default function StudioPage() {
   }
 
   function persistSettings(
-    over: Partial<{ replicateToken: string; pollinationsToken: string; name: string; email: string; accent: string }> = {},
+    over: Partial<{
+      replicateToken: string;
+      pollinationsToken: string;
+      hfToken: string;
+      name: string;
+      email: string;
+      accent: string;
+    }> = {},
   ) {
     saveSettings({
       replicateToken: token.trim(),
       pollinationsToken: pollToken.trim(),
+      hfToken: hfToken.trim(),
       name: name.trim(),
       email: email.trim(),
       accent,
@@ -337,11 +347,16 @@ export default function StudioPage() {
     const h: Record<string, string> = { "Content-Type": "application/json" };
     if (token.trim()) h["x-studio-key"] = token.trim();
     if (pollToken.trim()) h["x-pollinations-key"] = pollToken.trim();
+    if (hfToken.trim()) h["x-hf-key"] = hfToken.trim();
     return h;
-  }, [token, pollToken]);
+  }, [token, pollToken, hfToken]);
 
   function persistToken() {
-    persistSettings({ replicateToken: token.trim(), pollinationsToken: pollToken.trim() });
+    persistSettings({
+      replicateToken: token.trim(),
+      pollinationsToken: pollToken.trim(),
+      hfToken: hfToken.trim(),
+    });
     setShowKey(false);
     toast("Keys saved ✓");
   }
@@ -819,18 +834,52 @@ export default function StudioPage() {
       {/* API key panel */}
       {showKey && (
         <div className="mb-4 space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          {/* Pollinations token — free, fixes image rate limits */}
+          {/* Hugging Face token — free, most reliable images */}
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-300">
-              Pollinations token <span className="text-emerald-400">(free — for reliable images)</span>
+              Hugging Face token <span className="text-emerald-400">(free — most reliable images)</span>
             </label>
             <p className="mb-2 text-xs text-zinc-500">
-              The free image service now rate-limits anonymous use (1 at a time). A free token removes that. Sign in
-              at{" "}
+              The most reliable free image engine (FLUX). Create a free token at{" "}
+              <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-indigo-400 underline">
+                huggingface.co/settings/tokens
+              </a>{" "}
+              (type &ldquo;Read&rdquo;), then paste it here. Stored only in this browser.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={hfToken}
+                onChange={(e) => setHfToken(e.target.value)}
+                placeholder="hf_…"
+                className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+              />
+              {hfToken.trim() && (
+                <button
+                  onClick={() => {
+                    setHfToken("");
+                    persistSettings({ hfToken: "" });
+                    toast("Hugging Face token cleared");
+                  }}
+                  className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Pollinations token — free, fallback */}
+          <div className="border-t border-zinc-800 pt-3">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
+              Pollinations token <span className="text-zinc-500">(optional fallback)</span>
+            </label>
+            <p className="mb-2 text-xs text-zinc-500">
+              A second free image source. Sign in at{" "}
               <a href="https://auth.pollinations.ai" target="_blank" rel="noreferrer" className="text-indigo-400 underline">
                 auth.pollinations.ai
               </a>{" "}
-              and paste the token here. Stored only in this browser.
+              and paste the token here.
             </p>
             <div className="flex gap-2">
               <input
@@ -1243,11 +1292,11 @@ export default function StudioPage() {
       {error && (
         <p className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</p>
       )}
-      {(mode === "image" || (mode === "video" && videoEngine === "free")) && !pollToken.trim() && (
+      {(mode === "image" || (mode === "video" && videoEngine === "free")) && !hfToken.trim() && !pollToken.trim() && (
         <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
-          Heads up: the free image service now rate-limits anonymous use, so images can be slow or fail.{" "}
+          Heads up: the keyless image service is heavily rate-limited now, so images can be slow or fail.{" "}
           <button onClick={() => setShowKey(true)} className="underline underline-offset-2">
-            Add a free Pollinations token
+            Add a free Hugging Face token
           </button>{" "}
           for fast, reliable images.
         </p>
