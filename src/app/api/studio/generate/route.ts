@@ -24,10 +24,20 @@ const bodySchema = z.object({
   seed: z.number().int().positive().optional(),
   audioStyle: z.enum(["music", "ambience", "soundfx", "speech"]).optional(),
   duration: z.number().int().min(1).max(60).optional(),
+  // Pro text-to-video model choice (validated against an allowlist below).
+  videoModel: z.string().max(100).optional(),
   // Source image for image-to-video (remote URL or data: URI). Capped so a
   // base64 upload stays under serverless body limits — the client downscales.
   image: z.string().max(8_000_000).optional(),
 });
+
+// Allowlisted pro text-to-video models + how to build each one's input.
+const T2V_MODELS = ["wan-video/wan-2.1-1.3b", "minimax/video-01"];
+function videoInputFor(model: string, prompt: string, ratio: string): Record<string, unknown> {
+  if (model === "minimax/video-01") return { prompt };
+  // Wan (and the default) accept a prompt + aspect_ratio.
+  return { prompt, aspect_ratio: ratio === "9:16" ? "9:16" : "16:9" };
+}
 
 // Replicate official models. Override via env (format "owner/name"). Using the
 // official-model predictions endpoint means we don't have to pin a version hash.
@@ -157,15 +167,8 @@ export async function POST(req: NextRequest) {
     }
     // Text-to-video: generate a clip from the prompt alone.
     const ratio = parsed.ratio ?? "16:9";
-    return startReplicate(
-      "video",
-      VIDEO_MODEL,
-      {
-        prompt: parsed.prompt,
-        aspect_ratio: ratio === "9:16" ? "9:16" : ratio === "1:1" ? "1:1" : "16:9",
-      },
-      token,
-    );
+    const chosen = parsed.videoModel && T2V_MODELS.includes(parsed.videoModel) ? parsed.videoModel : VIDEO_MODEL;
+    return startReplicate("video", chosen, videoInputFor(chosen, parsed.prompt, ratio), token);
   }
 
   // audio

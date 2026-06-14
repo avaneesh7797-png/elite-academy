@@ -184,6 +184,12 @@ export type VideoDuration = (typeof VIDEO_DURATIONS)[number];
 
 export type VideoSource = "free" | "replicate";
 
+// Pro (Replicate) text-to-video models. Cheap default first.
+export const PRO_VIDEO_MODELS: { value: string; label: string }[] = [
+  { value: "wan-video/wan-2.1-1.3b", label: "Fast & cheap (Wan 2.1)" },
+  { value: "minimax/video-01", label: "Best quality (Minimax)" },
+];
+
 // ---- Accent themes (gradient class strings live here so Tailwind keeps them) ----
 export type Accent = "indigo" | "violet" | "emerald" | "rose" | "amber" | "sky";
 
