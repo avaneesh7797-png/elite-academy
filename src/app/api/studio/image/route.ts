@@ -64,7 +64,8 @@ async function tryHuggingFace(
           "Content-Type": "application/json",
           Accept: "image/png",
         },
-        body: JSON.stringify({ inputs: prompt, parameters: { width: w, height: h, seed } }),
+        // Minimal payload — many HF image models 400 on unknown parameters.
+        body: JSON.stringify({ inputs: prompt }),
         cache: "no-store",
       });
       const ct = r.headers.get("content-type") || "";
