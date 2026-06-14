@@ -294,8 +294,10 @@ export default function StudioPage() {
 
   const [toasts, setToasts] = useState<{ id: string; msg: string }[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
+  const [showHero, setShowHero] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const heroFileRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -381,6 +383,15 @@ export default function StudioPage() {
     } catch {
       setError("Could not read that image.");
     }
+  }
+
+  // The truly-free path: jump straight into Video + free engine and open the
+  // photo picker so a tap turns any photo into a motion video.
+  function startPhotoToVideo() {
+    setMode("video");
+    setVideoEngine("free");
+    setError("");
+    heroFileRef.current?.click();
   }
 
   function animateFromGallery(c: Creation) {
@@ -732,6 +743,9 @@ export default function StudioPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 pb-28 pt-8">
+      {/* Always-available picker so the hero CTA can open it in one tap */}
+      <input ref={heroFileRef} type="file" accept="image/*" onChange={onPickImage} className="hidden" />
+
       {/* Header */}
       <header className="mb-6 flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -941,6 +955,49 @@ export default function StudioPage() {
           <button onClick={persistToken} className={`rounded-md ${theme.solid} px-4 py-2 text-sm font-medium text-white hover:opacity-90`}>
             Save keys
           </button>
+        </div>
+      )}
+
+      {/* Hero: the 100%-free photo → video flow, front and centre */}
+      {showHero && (
+        <div className="mb-4 overflow-hidden rounded-2xl border border-emerald-800/50 bg-gradient-to-br from-emerald-950/50 to-zinc-900/40 p-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-emerald-500/20 p-2.5">
+              <Film className="h-5 w-5 text-emerald-300" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-emerald-100">100% free — no key, no setup</h2>
+              <p className="mt-0.5 text-xs text-emerald-200/70">
+                Turn any photo into a smooth motion video, right on your phone. Upload → pick a motion → export. No
+                token needed, ever.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={startPhotoToVideo}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
+                >
+                  <ImagePlus className="h-4 w-4" /> Upload a photo to animate
+                </button>
+                <button
+                  onClick={() => {
+                    setMode("video");
+                    setVideoEngine("free");
+                    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/60 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-900/30"
+                >
+                  <Video className="h-4 w-4" /> Open free video
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowHero(false)}
+              className="shrink-0 rounded-md p-1 text-emerald-300/60 hover:bg-emerald-900/40 hover:text-emerald-200"
+              title="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
