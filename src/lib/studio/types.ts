@@ -122,6 +122,16 @@ export function applyStyle(p: string, styleId: string): string {
   return s && s.suffix ? `${p}${s.suffix}` : p;
 }
 
+// A bare 1–3 word prompt (e.g. "ronaldo") gives generic/cartoonish results.
+// When no explicit style is chosen, nudge short prompts toward a detailed,
+// realistic render so the output is much better out of the box.
+export function expandShortPrompt(p: string): string {
+  const t = p.trim();
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 3) return t;
+  return `${t}, highly detailed, photorealistic, sharp focus, professional photography, 4k`;
+}
+
 // A negative prompt has no native Pollinations field, so fold it into the text.
 export function withNegative(p: string, negative: string): string {
   const n = negative.trim();
