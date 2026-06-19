@@ -41,6 +41,7 @@ import {
   accentTheme,
   applyStyle,
   enhancePrompt,
+  expandShortPrompt,
   randomPrompt,
   withNegative,
   type AspectRatio,
@@ -580,7 +581,9 @@ export default function StudioPage() {
 
   async function generateImages(count: number) {
     const base = prompt.trim();
-    const finalPrompt = withNegative(applyStyle(base, style), negative);
+    // With a style, use it; otherwise auto-expand a bare short prompt for quality.
+    const styledBase = style !== "none" ? applyStyle(base, style) : expandShortPrompt(base);
+    const finalPrompt = withNegative(styledBase, negative);
     const created: Creation[] = [];
     for (let i = 0; i < count; i++) {
       setStatus(count > 1 ? `Generating image ${i + 1} of ${count}…` : "Generating image…");
@@ -605,7 +608,7 @@ export default function StudioPage() {
 
   async function generateFreeVideo() {
     const base = prompt.trim();
-    const styled = applyStyle(base, style);
+    const styled = style !== "none" ? applyStyle(base, style) : expandShortPrompt(base);
     let images: string[];
     if (videoImage) {
       images = [videoImage];
