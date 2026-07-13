@@ -138,6 +138,38 @@ export function withNegative(p: string, negative: string): string {
   return n ? `${p}. Avoid: ${n}` : p;
 }
 
+// ---- Free text-to-video: build a cinematic "storyboard" of keyframe prompts ----
+// No free API does real AI video, so we generate several keyframes for the same
+// scene (fixed seed keeps it consistent) from evolving camera/shot descriptions,
+// then the in-browser engine crossfades + pans between them into a real clip.
+const SHOT_MODIFIERS = [
+  "wide establishing shot, cinematic lighting",
+  "medium shot, dynamic angle, cinematic",
+  "dramatic close-up, shallow depth of field, cinematic",
+  "low-angle hero shot, epic, cinematic",
+  "sweeping aerial view, cinematic",
+  "over-the-shoulder shot, depth, cinematic",
+  "extreme close-up, intricate detail, cinematic",
+  "wide shot, golden-hour glow, cinematic",
+  "tracking shot, motion blur, cinematic",
+  "top-down view, symmetrical, cinematic",
+  "side profile shot, rim light, cinematic",
+  "reverse angle, atmospheric haze, cinematic",
+];
+
+export const STORY_SHOTS = [4, 6, 8, 10] as const;
+export type StoryShots = (typeof STORY_SHOTS)[number];
+
+// Returns `n` keyframe prompts for one scene, each a different cinematic shot.
+export function buildStoryboard(base: string, n: number): string[] {
+  const clean = base.trim().replace(/[.,\s]+$/, "") || "a cinematic scene";
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(`${clean}, ${SHOT_MODIFIERS[i % SHOT_MODIFIERS.length]}, highly detailed, sharp focus`);
+  }
+  return out;
+}
+
 export const RANDOM_PROMPTS: string[] = [
   "A bioluminescent jellyfish floating through a dark coral reef, macro photography",
   "An astronaut planting a glowing flower on a red alien planet, cinematic",
@@ -186,7 +218,7 @@ export const MOTION_PRESETS: { value: Motion; label: string; needsFrames?: boole
   { value: "pan-up", label: "Pan up" },
   { value: "pan-down", label: "Pan down" },
   { value: "float", label: "Gentle float" },
-  { value: "morph", label: "Dream morph (multi-frame)", needsFrames: true },
+  { value: "morph", label: "AI video ✨ (text → clip)", needsFrames: true },
 ];
 
 export const VIDEO_DURATIONS = [2, 3, 4, 6, 8] as const;

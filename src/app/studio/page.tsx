@@ -36,7 +36,9 @@ import {
   IMAGE_MODELS,
   MOTION_PRESETS,
   PRO_VIDEO_MODELS,
+  STORY_SHOTS,
   STYLE_PRESETS,
+  buildStoryboard,
   VIDEO_DURATIONS,
   accentTheme,
   applyStyle,
@@ -272,7 +274,7 @@ export default function StudioPage() {
   const [videoEngine, setVideoEngine] = useState<"free" | "pro">("free");
   const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
-  const [frames, setFrames] = useState(3);
+  const [storyShots, setStoryShots] = useState(6);
   const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
   const [videoImage, setVideoImage] = useState<string | null>(null);
 
@@ -608,19 +610,32 @@ export default function StudioPage() {
 
   async function generateFreeVideo() {
     const base = prompt.trim();
-    const styled = style !== "none" ? applyStyle(base, style) : expandShortPrompt(base);
+    const isStory = motion === "morph" && !videoImage;
     let images: string[];
+    let durationMs = videoDuration * 1000;
+
     if (videoImage) {
       images = [videoImage];
-    } else {
-      const count = motion === "morph" ? Math.max(2, frames) : 1;
+    } else if (isStory) {
+      // Free text-to-video: a cinematic storyboard of keyframes for one scene.
+      // A single fixed seed keeps the scene consistent across the shots.
+      const shots = buildStoryboard(base, storyShots);
+      const seed = Math.floor(Math.random() * 1_000_000_000);
       images = [];
-      for (let i = 0; i < count; i++) {
-        setStatus(count > 1 ? `Rendering frame ${i + 1} of ${count}…` : "Rendering the frame…");
-        const { url } = await requestImage(styled, Math.floor(Math.random() * 1_000_000_000));
+      for (let i = 0; i < shots.length; i++) {
+        setStatus(`Filming shot ${i + 1} of ${shots.length}…`);
+        const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
+        const { url } = await requestImage(framePrompt, seed);
         images.push(url);
       }
+      durationMs = storyShots * 1100; // ~1.1s per shot
+    } else {
+      const styled = style !== "none" ? applyStyle(base, style) : expandShortPrompt(base);
+      setStatus("Rendering the frame…");
+      const { url } = await requestImage(styled, Math.floor(Math.random() * 1_000_000_000));
+      images = [url];
     }
+
     save({
       id: newId(),
       mode: "video",
@@ -629,14 +644,18 @@ export default function StudioPage() {
       url: "",
       images,
       motion,
-      durationMs: videoDuration * 1000,
+      durationMs,
       fps: 30,
       ratio,
       style: style !== "none" ? style : undefined,
       author: name.trim() || undefined,
       createdAt: Date.now(),
     });
-    toast("Video ready — it loops live below. Tap Export to save a file.");
+    toast(
+      isStory
+        ? "🎬 Your AI video is ready — it loops below. Tap Export to save the file."
+        : "Video ready — it loops live below. Tap Export to save a file.",
+    );
   }
 
   async function generate() {
@@ -995,27 +1014,29 @@ export default function StudioPage() {
               <Film className="h-5 w-5 text-emerald-300" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-emerald-100">100% free — no key, no setup</h2>
+              <h2 className="text-sm font-semibold text-emerald-100">Free AI video from text ✨</h2>
               <p className="mt-0.5 text-xs text-emerald-200/70">
-                Turn any photo into a smooth motion video, right on your phone. Upload → pick a motion → export. No
-                token needed, ever.
+                Type a scene and get a real cinematic clip — built from AI keyframes right on your phone, then export
+                the file. No paid API, no Replicate credit. Or animate your own photo.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={startPhotoToVideo}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
-                >
-                  <ImagePlus className="h-4 w-4" /> Upload a photo to animate
-                </button>
                 <button
                   onClick={() => {
                     setMode("video");
                     setVideoEngine("free");
+                    setMotion("morph");
+                    setVideoImage(null);
                     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
+                >
+                  <Film className="h-4 w-4" /> Make an AI video from text
+                </button>
+                <button
+                  onClick={startPhotoToVideo}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/60 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-900/30"
                 >
-                  <Video className="h-4 w-4" /> Open free video
+                  <ImagePlus className="h-4 w-4" /> Animate a photo
                 </button>
               </div>
             </div>
@@ -1277,31 +1298,33 @@ export default function StudioPage() {
                   ))}
                 </select>
               </label>
-              <label className="flex items-center gap-2 text-xs text-zinc-400">
-                Length
-                <select
-                  value={videoDuration}
-                  onChange={(e) => setVideoDuration(Number(e.target.value) as VideoDuration)}
-                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
-                >
-                  {VIDEO_DURATIONS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}s
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {motion === "morph" && !videoImage && (
+              {motion !== "morph" && (
                 <label className="flex items-center gap-2 text-xs text-zinc-400">
-                  Frames
+                  Length
                   <select
-                    value={frames}
-                    onChange={(e) => setFrames(Number(e.target.value))}
+                    value={videoDuration}
+                    onChange={(e) => setVideoDuration(Number(e.target.value) as VideoDuration)}
                     className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
                   >
-                    {[2, 3, 4].map((n) => (
+                    {VIDEO_DURATIONS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}s
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {motion === "morph" && !videoImage && (
+                <label className="flex items-center gap-2 text-xs text-zinc-400">
+                  Shots
+                  <select
+                    value={storyShots}
+                    onChange={(e) => setStoryShots(Number(e.target.value))}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                  >
+                    {STORY_SHOTS.map((n) => (
                       <option key={n} value={n}>
-                        {n}
+                        {n} shots
                       </option>
                     ))}
                   </select>
