@@ -271,7 +271,7 @@ export default function StudioPage() {
   const [duration, setDuration] = useState<AudioDuration>(8);
 
   // Free in-browser video controls.
-  const [videoEngine, setVideoEngine] = useState<"free" | "pro">("free");
+  const [videoEngine, setVideoEngine] = useState<"free" | "pro" | "hf">("free");
   const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
   const [storyShots, setStoryShots] = useState(6);
@@ -691,8 +691,35 @@ export default function StudioPage() {
       return;
     }
 
+    if (mode === "video" && videoEngine === "hf") {
+      generateHfVideo(trimmed);
+      return;
+    }
+
     // Pro (Replicate) video / audio.
     proGenerate(trimmed);
+  }
+
+  // Real free AI video via Hugging Face (through our /api/studio/video proxy).
+  // The <video> element loads the URL, which generates + streams on demand.
+  function generateHfVideo(trimmed: string) {
+    if (!hfToken.trim()) {
+      setError("Real AI video needs a free Hugging Face token — add it with the “API key” button.");
+      setShowKey(true);
+      return;
+    }
+    const params = new URLSearchParams({ prompt: trimmed, hf: hfToken.trim() });
+    save({
+      id: newId(),
+      mode: "video",
+      source: "replicate",
+      prompt: trimmed,
+      url: `/api/studio/video?${params.toString()}`,
+      ratio,
+      author: name.trim() || undefined,
+      createdAt: Date.now(),
+    });
+    toast("🎬 Rendering a real AI video — it appears below and can take ~20–60s to load.");
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -1115,10 +1142,16 @@ export default function StudioPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2">
             <span className="px-1 text-xs text-zinc-500">Engine</span>
             <button
+              onClick={() => setVideoEngine("hf")}
+              className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${videoEngine === "hf" ? `${theme.solid} text-white` : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Real AI (free)
+            </button>
+            <button
               onClick={() => setVideoEngine("free")}
               className={`rounded-md px-3 py-1.5 text-xs font-medium ${videoEngine === "free" ? `${theme.solid} text-white` : "text-zinc-400 hover:text-zinc-200"}`}
             >
-              Free (in-browser)
+              Motion (free)
             </button>
             <button
               onClick={() => setVideoEngine("pro")}
@@ -1127,13 +1160,17 @@ export default function StudioPage() {
               <Film className="h-3.5 w-3.5" /> Pro (Replicate)
             </button>
             <span className="ml-auto px-1 text-[11px] text-zinc-500">
-              {videoEngine === "free" ? "No key needed · loops + export" : "Needs Replicate credit"}
+              {videoEngine === "hf"
+                ? "Real generated video · free HF token · short/low-res"
+                : videoEngine === "free"
+                  ? "No key · loops + export"
+                  : "Needs Replicate credit"}
             </span>
           </div>
         )}
 
         {/* Image-to-video / animate: attach a still */}
-        {mode === "video" && (
+        {mode === "video" && videoEngine !== "hf" && (
           <div className="mt-3">
             <input ref={fileInputRef} type="file" accept="image/*" onChange={onPickImage} className="hidden" />
             {videoImage ? (
