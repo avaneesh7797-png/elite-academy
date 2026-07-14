@@ -95,13 +95,34 @@ export function drawMotionFrame(
   if (!imgs.length) return;
 
   if (motion === "morph" && imgs.length > 1) {
+    // Cinematic multi-frame ("story") render: each keyframe gets its own Ken
+    // Burns pan/zoom, and consecutive frames crossfade — so it feels like a
+    // moving video, not a slideshow. Wraps last→first for a seamless loop.
     const n = imgs.length;
     const f = t * n;
     const i = Math.floor(f) % n;
     const frac = f - Math.floor(f);
-    const z = 1.08;
-    drawCover(ctx, imgs[i], W, H, z + 0.05 * frac, 0, 0, 1);
-    drawCover(ctx, imgs[(i + 1) % n], W, H, z + 0.05 * frac - 0.05, 0, 0, easeInOut(frac));
+
+    // Per-keyframe Ken Burns trajectory, chosen deterministically by index.
+    const kb = (idx: number, p: number) => {
+      const dir = idx % 4;
+      const zoom = 1.05 + 0.14 * p; // slow push-in across the shot
+      const amt = 0.28 * p;
+      const panX = dir === 0 ? -amt : dir === 1 ? amt : 0;
+      const panY = dir === 2 ? -amt : dir === 3 ? amt : 0;
+      return { zoom, panX, panY };
+    };
+
+    const cur = kb(i, frac);
+    drawCover(ctx, imgs[i], W, H, cur.zoom, cur.panX, cur.panY, 1);
+
+    // Crossfade into the next keyframe over the last 28% of this shot.
+    const XF = 0.72;
+    if (frac > XF) {
+      const a = easeInOut((frac - XF) / (1 - XF));
+      const nxt = kb((i + 1) % n, 0);
+      drawCover(ctx, imgs[(i + 1) % n], W, H, nxt.zoom, nxt.panX, nxt.panY, a);
+    }
     return;
   }
 
