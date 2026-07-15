@@ -719,7 +719,7 @@ export default function StudioPage() {
       author: name.trim() || undefined,
       createdAt: Date.now(),
     });
-    toast("🎬 Rendering a real AI video — it appears below and can take ~20–60s to load.");
+    toast("🎬 Rendering a real AI video (LTX/CogVideoX) — it appears below and can take ~30–120s.");
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -1161,7 +1161,7 @@ export default function StudioPage() {
             </button>
             <span className="ml-auto px-1 text-[11px] text-zinc-500">
               {videoEngine === "hf"
-                ? "Real generated video · free HF token · short/low-res"
+                ? "Real generated video · LTX / CogVideoX · free HF token"
                 : videoEngine === "free"
                   ? "No key · loops + export"
                   : "Needs Replicate credit"}
