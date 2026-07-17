@@ -67,6 +67,7 @@ import {
   toggleFavorite,
   type Creation,
 } from "@/lib/studio/storage";
+import { MUSIC_MOODS, type Mood } from "@/lib/studio/music";
 import CanvasVideo from "@/components/studio/canvas-video";
 
 const PROMPT_IDEAS: Record<StudioMode, string[]> = {
@@ -275,6 +276,8 @@ export default function StudioPage() {
   const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
   const [storyShots, setStoryShots] = useState(6);
+  const [cinematic, setCinematic] = useState(true);
+  const [mood, setMood] = useState<Mood>("cinematic");
   const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
   const [videoImage, setVideoImage] = useState<string | null>(null);
 
@@ -647,6 +650,8 @@ export default function StudioPage() {
       durationMs,
       fps: 30,
       ratio,
+      cinematic,
+      mood: mood !== "none" ? mood : undefined,
       style: style !== "none" ? style : undefined,
       author: name.trim() || undefined,
       createdAt: Date.now(),
@@ -1367,6 +1372,24 @@ export default function StudioPage() {
                   </select>
                 </label>
               )}
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                Music
+                <select
+                  value={mood}
+                  onChange={(e) => setMood(e.target.value as Mood)}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                >
+                  {MUSIC_MOODS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                <input type="checkbox" checked={cinematic} onChange={(e) => setCinematic(e.target.checked)} className="accent-indigo-500" />
+                Cinematic look 🎬
+              </label>
             </>
           )}
 
@@ -1530,7 +1553,16 @@ export default function StudioPage() {
             {visible.map((c) => (
               <figure key={c.id} className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60">
                 {c.mode === "video" && c.source === "free" && c.images?.length ? (
-                  <CanvasVideo images={c.images} motion={c.motion ?? "kenburns"} durationMs={c.durationMs ?? 4000} ratio={c.ratio} fps={c.fps ?? 30} onToast={toast} />
+                  <CanvasVideo
+                    images={c.images}
+                    motion={c.motion ?? "kenburns"}
+                    durationMs={c.durationMs ?? 4000}
+                    ratio={c.ratio}
+                    fps={c.fps ?? 30}
+                    cinematic={c.cinematic ?? false}
+                    mood={(c.mood as Mood) ?? "none"}
+                    onToast={toast}
+                  />
                 ) : c.mode === "video" ? (
                   // eslint-disable-next-line jsx-a11y/media-has-caption
                   <video src={c.url} controls loop className="aspect-video w-full bg-black object-cover" />

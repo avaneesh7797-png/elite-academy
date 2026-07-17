@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, Loader2, Pause, Play } from "lucide-react";
+import { Download, Loader2, Music, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import {
   dimsForRatio,
   drawMotionFrame,
@@ -9,6 +9,7 @@ import {
   loadImage,
   recordMotionVideo,
 } from "@/lib/studio/video-engine";
+import { startMood, type Mood, type MusicHandle } from "@/lib/studio/music";
 import type { Motion } from "@/lib/studio/types";
 
 type Props = {
@@ -17,22 +18,36 @@ type Props = {
   durationMs?: number;
   ratio?: string;
   fps?: number;
+  cinematic?: boolean;
+  mood?: Mood;
   onToast?: (msg: string) => void;
 };
 
 // A free, in-browser "video": animates the source image(s) live on a looping
-// canvas, with an export-to-file button when the browser supports recording.
-export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, fps = 30, onToast }: Props) {
+// canvas (optional cinematic film look), with a generated soundtrack and an
+// export-to-file button (music muxed in when the browser supports it).
+export default function CanvasVideo({
+  images,
+  motion,
+  durationMs = 4000,
+  ratio,
+  fps = 30,
+  cinematic = false,
+  mood = "none",
+  onToast,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgsRef = useRef<HTMLImageElement[]>([]);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number>(0);
   const lastTRef = useRef<number>(0);
   const playingRef = useRef<boolean>(true);
+  const musicRef = useRef<MusicHandle | null>(null);
 
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [playing, setPlaying] = useState(true);
+  const [musicOn, setMusicOn] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -42,6 +57,14 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
   useEffect(() => {
     playingRef.current = playing;
   }, [playing]);
+
+  // Stop any music when the component unmounts.
+  useEffect(() => {
+    return () => {
+      musicRef.current?.stop();
+      musicRef.current = null;
+    };
+  }, []);
 
   // Load the frame images for display (no crossOrigin → max compatibility).
   useEffect(() => {
@@ -81,7 +104,7 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
         startRef.current = now - lastTRef.current * durationMs;
       }
       try {
-        drawMotionFrame(ctx, imgsRef.current, motion, lastTRef.current, W, H);
+        drawMotionFrame(ctx, imgsRef.current, motion, lastTRef.current, W, H, cinematic);
       } catch {
         /* ignore transient draw errors */
       }
@@ -91,7 +114,23 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [ready, motion, durationMs, W, H]);
+  }, [ready, motion, durationMs, W, H, cinematic]);
+
+  function toggleMusic() {
+    if (musicRef.current) {
+      musicRef.current.stop();
+      musicRef.current = null;
+      setMusicOn(false);
+      return;
+    }
+    const h = startMood(mood, { toSpeakers: true });
+    if (h) {
+      musicRef.current = h;
+      setMusicOn(true);
+    } else {
+      onToast?.("Music isn't supported on this browser.");
+    }
+  }
 
   async function doExport() {
     if (exporting) return;
@@ -101,6 +140,9 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
     }
     setExporting(true);
     setProgress(0);
+    // Build a silent-to-speakers music stream to mux into the file.
+    let music: MusicHandle | null = null;
+    if (mood !== "none") music = startMood(mood, { toSpeakers: false });
     try {
       // Reload remote frames with CORS so the recording canvas isn't tainted.
       let exImgs: HTMLImageElement[];
@@ -116,6 +158,8 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
         H,
         durationMs,
         fps,
+        cinematic,
+        audioStream: music?.stream ?? null,
         onProgress: setProgress,
       });
       if (!blob) {
@@ -130,10 +174,11 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 15000);
-      onToast?.("Video file exported ✓");
+      onToast?.(mood !== "none" ? "Video exported with music ✓" : "Video file exported ✓");
     } catch {
       onToast?.("Couldn't export this video.");
     } finally {
+      music?.stop();
       setExporting(false);
       setProgress(0);
     }
@@ -154,14 +199,12 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
         <canvas ref={canvasRef} className="block w-full" />
       )}
 
-      {/* Live badge */}
       {ready && !failed && (
         <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300 backdrop-blur">
-          ● Live preview
+          {cinematic ? "● Cinematic" : "● Live preview"}
         </span>
       )}
 
-      {/* Controls */}
       {ready && !failed && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
           <button
@@ -171,11 +214,20 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
           >
             {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </button>
+          {mood !== "none" && (
+            <button
+              onClick={toggleMusic}
+              className="rounded-full bg-black/60 p-2 text-zinc-200 backdrop-blur hover:bg-black/80"
+              title={musicOn ? "Mute music" : "Play music"}
+            >
+              {musicOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </button>
+          )}
           <button
             onClick={doExport}
             disabled={exporting}
             className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-2 text-[11px] text-zinc-200 backdrop-blur hover:bg-black/80 disabled:opacity-60"
-            title="Export to a video file"
+            title="Export to a video file (with music)"
           >
             {exporting ? (
               <>
@@ -183,7 +235,7 @@ export default function CanvasVideo({ images, motion, durationMs = 4000, ratio, 
               </>
             ) : (
               <>
-                <Download className="h-3.5 w-3.5" /> Export
+                {mood !== "none" ? <Music className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />} Export
               </>
             )}
           </button>

@@ -22,6 +22,8 @@ export type Creation = {
   motion?: Motion;
   durationMs?: number;
   fps?: number;
+  cinematic?: boolean; // film-look post-processing on free videos
+  mood?: string; // generated soundtrack mood
 };
 
 const GALLERY_KEY = "studio:gallery:v1";
