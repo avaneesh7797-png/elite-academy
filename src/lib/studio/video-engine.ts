@@ -155,11 +155,12 @@ export function drawMotionFrame(
     const cur = kb(i, frac);
     drawCover(ctx, imgs[i], W, H, cur.zoom, cur.panX, cur.panY, 1);
 
-    // Crossfade into the next keyframe over the last 28% of this shot.
-    const XF = 0.72;
+    // Long, smooth cross-dissolve into the next keyframe (last 42% of the shot)
+    // so motion reads as continuous film, not a slideshow cut.
+    const XF = 0.58;
     if (frac > XF) {
       const a = easeInOut((frac - XF) / (1 - XF));
-      const nxt = kb((i + 1) % n, 0);
+      const nxt = kb((i + 1) % n, easeInOut((frac - XF) / (1 - XF)) * 0.5);
       drawCover(ctx, imgs[(i + 1) % n], W, H, nxt.zoom, nxt.panX, nxt.panY, a);
     }
     if (cinematic) applyCinematic(ctx, W, H);
