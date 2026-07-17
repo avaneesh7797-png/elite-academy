@@ -81,6 +81,44 @@ function drawCover(
   ctx.globalAlpha = 1;
 }
 
+// Film-look post-processing: teal-orange grade, vignette, grain, letterbox.
+function applyCinematic(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  ctx.save();
+  // Warm highlights / cool shadows via soft overlays.
+  ctx.globalCompositeOperation = "overlay";
+  ctx.fillStyle = "rgba(255,150,70,0.05)";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(30,120,200,0.05)";
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "source-over";
+
+  // Vignette.
+  const r = Math.max(W, H);
+  const vg = ctx.createRadialGradient(W / 2, H / 2, r * 0.32, W / 2, H / 2, r * 0.72);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.5)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Sparse film grain.
+  const grains = Math.floor((W * H) / 1400);
+  ctx.globalAlpha = 0.05;
+  for (let i = 0; i < grains; i++) {
+    ctx.fillStyle = Math.random() < 0.5 ? "#000" : "#fff";
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+
+  // Cinematic 2.39:1 letterbox bars (only if they fit).
+  const barH = (H - W / 2.39) / 2;
+  if (barH > 2) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, barH);
+    ctx.fillRect(0, H - barH, W, barH);
+  }
+  ctx.restore();
+}
+
 // Render a single frame at normalized time t in [0, 1).
 export function drawMotionFrame(
   ctx: CanvasRenderingContext2D,
@@ -89,6 +127,7 @@ export function drawMotionFrame(
   t: number,
   W: number,
   H: number,
+  cinematic = false,
 ) {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, H);
@@ -123,11 +162,13 @@ export function drawMotionFrame(
       const nxt = kb((i + 1) % n, 0);
       drawCover(ctx, imgs[(i + 1) % n], W, H, nxt.zoom, nxt.panX, nxt.panY, a);
     }
+    if (cinematic) applyCinematic(ctx, W, H);
     return;
   }
 
   const { scale, panX, panY } = transformFor(motion, t);
   drawCover(ctx, imgs[0], W, H, scale, panX, panY, 1);
+  if (cinematic) applyCinematic(ctx, W, H);
 }
 
 export function exportSupported(): boolean {
@@ -156,13 +197,15 @@ export type RecordOptions = {
   H: number;
   durationMs: number;
   fps?: number;
+  cinematic?: boolean;
+  audioStream?: MediaStream | null; // optional soundtrack to mux into the file
   onProgress?: (p: number) => void;
 };
 
 // Record one loop of the animation to a video Blob. Returns null if the browser
 // can't record (e.g. iOS without MediaRecorder) or the canvas is tainted.
 export async function recordMotionVideo(opts: RecordOptions): Promise<Blob | null> {
-  const { imgs, motion, W, H, durationMs, fps = 30, onProgress } = opts;
+  const { imgs, motion, W, H, durationMs, fps = 30, cinematic = false, audioStream, onProgress } = opts;
   if (!exportSupported()) return null;
   const mime = pickMime();
   if (!mime) return null;
@@ -176,6 +219,14 @@ export async function recordMotionVideo(opts: RecordOptions): Promise<Blob | nul
   let stream: MediaStream;
   try {
     stream = (canvas as HTMLCanvasElement & { captureStream(fps?: number): MediaStream }).captureStream(fps);
+    // Mux in the soundtrack, if the browser allows combining tracks.
+    if (audioStream) {
+      try {
+        for (const track of audioStream.getAudioTracks()) stream.addTrack(track);
+      } catch {
+        /* audio muxing unsupported — export video only */
+      }
+    }
   } catch {
     return null;
   }
@@ -212,7 +263,7 @@ export async function recordMotionVideo(opts: RecordOptions): Promise<Blob | nul
       const el = now - start;
       const t = (el % durationMs) / durationMs;
       try {
-        drawMotionFrame(ctx, imgs, motion, t, W, H);
+        drawMotionFrame(ctx, imgs, motion, t, W, H, cinematic);
       } catch {
         tainted = true;
         resolve();
