@@ -227,7 +227,7 @@ function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
 // Tile for the free "Real AI" (Hugging Face) videos. Fetches the proxy URL and
 // shows the real result — a playable clip, or the server's actual error message
 // (so a failed free-tier render explains itself instead of a broken player).
-function HfVideoTile({ url }: { url: string }) {
+function HfVideoTile({ url, prompt, onMakeMotion }: { url: string; prompt?: string; onMakeMotion?: (p: string) => void }) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -281,7 +281,16 @@ function HfVideoTile({ url }: { url: string }) {
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-amber-950/40 to-zinc-900 p-4 text-center">
         <Film className="h-6 w-6 text-amber-300/80" />
         <p className="text-[11px] leading-snug text-amber-200/90">{msg}</p>
-        <p className="text-[11px] text-zinc-500">Tip: the free “Motion” engine always works — cinematic look + music.</p>
+        {prompt && onMakeMotion ? (
+          <button
+            onClick={() => onMakeMotion(prompt)}
+            className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
+          >
+            <Wand2 className="h-3.5 w-3.5" /> Make it free with Motion
+          </button>
+        ) : (
+          <p className="text-[11px] text-zinc-500">Tip: the free “Motion” engine always works — cinematic look + music.</p>
+        )}
       </div>
     );
   }
@@ -736,6 +745,54 @@ export default function StudioPage() {
         ? "🎬 Your AI video is ready — it loops below. Tap Export to save the file."
         : "Video ready — it loops live below. Tap Export to save a file.",
     );
+  }
+
+  // One-tap recovery when a paid/HF real-AI video fails: make a real cinematic
+  // clip from the same prompt with the always-free Motion engine.
+  async function makeMotionVideo(basePrompt: string) {
+    if (busy) return;
+    setMode("video");
+    setVideoEngine("free");
+    setMotion("morph");
+    setVideoImage(null);
+    setPrompt(basePrompt);
+    setError("");
+    setBusy(true);
+    try {
+      const shots = buildStoryboard(basePrompt, storyShots);
+      const seed = Math.floor(Math.random() * 1_000_000_000);
+      const images: string[] = [];
+      for (let i = 0; i < shots.length; i++) {
+        setStatus(`Filming shot ${i + 1} of ${shots.length}…`);
+        const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
+        const { url } = await requestImage(framePrompt, seed);
+        images.push(url);
+      }
+      save({
+        id: newId(),
+        mode: "video",
+        source: "free",
+        prompt: basePrompt,
+        url: "",
+        images,
+        motion: "morph",
+        durationMs: storyShots * 1100,
+        fps: 30,
+        ratio,
+        cinematic,
+        mood: mood !== "none" ? mood : undefined,
+        style: style !== "none" ? style : undefined,
+        author: name.trim() || undefined,
+        createdAt: Date.now(),
+      });
+      toast("🎬 Made it with the free Motion engine ✓");
+      if (typeof window !== "undefined") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't make the Motion video.");
+    } finally {
+      setBusy(false);
+      setStatus("");
+    }
   }
 
   async function generate() {
@@ -1653,7 +1710,7 @@ export default function StudioPage() {
                     onToast={toast}
                   />
                 ) : c.mode === "video" && c.url.startsWith("/api/studio/video") ? (
-                  <HfVideoTile url={c.url} />
+                  <HfVideoTile url={c.url} prompt={c.prompt} onMakeMotion={makeMotionVideo} />
                 ) : c.mode === "video" ? (
                   // eslint-disable-next-line jsx-a11y/media-has-caption
                   <video src={c.url} controls loop className="aspect-video w-full bg-black object-cover" />
