@@ -371,6 +371,9 @@ export default function StudioPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [showHero, setShowHero] = useState(true);
   const [diag, setDiag] = useState("");
+  // Server-side keys (the "Higgsfield model" — the platform holds the key so
+  // visitors need no token). Populated from /api/studio/capabilities.
+  const [serverCaps, setServerCaps] = useState<{ image?: boolean; video?: boolean; pro?: boolean }>({});
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const heroFileRef = useRef<HTMLInputElement | null>(null);
@@ -389,6 +392,11 @@ export default function StudioPage() {
     setEmail(s.email);
     setAccent(s.accent || "indigo");
     if (!s.email && !s.name) setShowProfile(true);
+    // Discover server-side keys so the app can be tokenless for everyone.
+    fetch("/api/studio/capabilities")
+      .then((r) => r.json())
+      .then((c) => setServerCaps(c || {}))
+      .catch(() => undefined);
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
@@ -775,12 +783,14 @@ export default function StudioPage() {
   // Real free AI video via Hugging Face (through our /api/studio/video proxy).
   // The <video> element loads the URL, which generates + streams on demand.
   function generateHfVideo(trimmed: string) {
-    if (!hfToken.trim()) {
-      setError("Real AI video needs a free Hugging Face token — add it with the “API key” button.");
+    // Works with the user's token OR a server-side key (tokenless mode).
+    if (!hfToken.trim() && !serverCaps.video) {
+      setError("Real AI video needs a Hugging Face token — add it with the “API key” button (or set HF_TOKEN on the server for a tokenless app).");
       setShowKey(true);
       return;
     }
-    const params = new URLSearchParams({ prompt: trimmed, hf: hfToken.trim() });
+    const params = new URLSearchParams({ prompt: trimmed });
+    if (hfToken.trim()) params.set("hf", hfToken.trim());
     save({
       id: newId(),
       mode: "video",
@@ -1233,10 +1243,14 @@ export default function StudioPage() {
             </button>
             <span className="ml-auto px-1 text-[11px] text-zinc-500">
               {videoEngine === "hf"
-                ? "Real generated video · LTX / CogVideoX · free HF token"
+                ? serverCaps.video
+                  ? "Real generated video · powered · no token needed ✨"
+                  : "Real generated video · LTX / CogVideoX · free HF token"
                 : videoEngine === "free"
                   ? "No key · loops + export"
-                  : "Needs Replicate credit"}
+                  : serverCaps.pro
+                    ? "Powered · no token needed ✨"
+                    : "Needs Replicate credit"}
             </span>
           </div>
         )}
@@ -1545,13 +1559,21 @@ export default function StudioPage() {
       {error && (
         <p className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</p>
       )}
-      {(mode === "image" || (mode === "video" && videoEngine === "free")) && !hfToken.trim() && !pollToken.trim() && (
-        <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
-          Heads up: the keyless image service is heavily rate-limited now, so images can be slow or fail.{" "}
-          <button onClick={() => setShowKey(true)} className="underline underline-offset-2">
-            Add a free Hugging Face token
-          </button>{" "}
-          for fast, reliable images.
+      {(mode === "image" || (mode === "video" && videoEngine === "free")) &&
+        !hfToken.trim() &&
+        !pollToken.trim() &&
+        !serverCaps.image && (
+          <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
+            Heads up: the keyless image service is heavily rate-limited now, so images can be slow or fail.{" "}
+            <button onClick={() => setShowKey(true)} className="underline underline-offset-2">
+              Add a free Hugging Face token
+            </button>{" "}
+            for fast, reliable images.
+          </p>
+        )}
+      {serverCaps.image && !hfToken.trim() && (
+        <p className="mt-3 rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200/90">
+          ✨ This app is powered — image{serverCaps.video ? " & AI video" : ""} generation works with no token needed.
         </p>
       )}
 
