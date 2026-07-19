@@ -224,6 +224,73 @@ function ImageTile({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
   );
 }
 
+// Tile for the free "Real AI" (Hugging Face) videos. Fetches the proxy URL and
+// shows the real result — a playable clip, or the server's actual error message
+// (so a failed free-tier render explains itself instead of a broken player).
+function HfVideoTile({ url }: { url: string }) {
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    let obj: string | null = null;
+    setState("loading");
+    setMsg("");
+    (async () => {
+      try {
+        const r = await fetch(url);
+        const ct = r.headers.get("content-type") || "";
+        if (r.ok && (ct.startsWith("video/") || ct.startsWith("image/"))) {
+          const b = await r.blob();
+          obj = URL.createObjectURL(b);
+          if (alive) {
+            setBlobUrl(obj);
+            setState("ready");
+          }
+        } else {
+          const t = await r.text().catch(() => "");
+          if (alive) {
+            setMsg(t || "Couldn't generate this video on the free tier.");
+            setState("error");
+          }
+        }
+      } catch {
+        if (alive) {
+          setMsg("Network error while generating.");
+          setState("error");
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+      if (obj) URL.revokeObjectURL(obj);
+    };
+  }, [url]);
+
+  if (state === "loading") {
+    return (
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-black px-4 text-center">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+        <span className="text-[11px] text-zinc-500">Generating real AI video… (can take 20–90s)</span>
+      </div>
+    );
+  }
+  if (state === "error") {
+    return (
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-amber-950/40 to-zinc-900 p-4 text-center">
+        <Film className="h-6 w-6 text-amber-300/80" />
+        <p className="text-[11px] leading-snug text-amber-200/90">{msg}</p>
+        <p className="text-[11px] text-zinc-500">Tip: the free “Motion” engine always works — cinematic look + music.</p>
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line jsx-a11y/media-has-caption
+    <video src={blobUrl ?? undefined} controls loop playsInline className="aspect-video w-full bg-black object-contain" />
+  );
+}
+
 // Read an uploaded file and downscale it to a compact JPEG data URI.
 async function fileToDataUrl(file: File, max = 1280, quality = 0.85): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -1563,6 +1630,8 @@ export default function StudioPage() {
                     mood={(c.mood as Mood) ?? "none"}
                     onToast={toast}
                   />
+                ) : c.mode === "video" && c.url.startsWith("/api/studio/video") ? (
+                  <HfVideoTile url={c.url} />
                 ) : c.mode === "video" ? (
                   // eslint-disable-next-line jsx-a11y/media-has-caption
                   <video src={c.url} controls loop className="aspect-video w-full bg-black object-cover" />
