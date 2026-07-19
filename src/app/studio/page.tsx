@@ -840,12 +840,8 @@ export default function StudioPage() {
   // Real free AI video via Hugging Face (through our /api/studio/video proxy).
   // The <video> element loads the URL, which generates + streams on demand.
   function generateHfVideo(trimmed: string) {
-    // Works with the user's token OR a server-side key (tokenless mode).
-    if (!hfToken.trim() && !serverCaps.video) {
-      setError("Real AI video needs a Hugging Face token — add it with the “API key” button (or set HF_TOKEN on the server for a tokenless app).");
-      setShowKey(true);
-      return;
-    }
+    // Keyless: the server first tries public HF Spaces (no token). A token, if
+    // present, just unlocks the hf-inference fallback too.
     const params = new URLSearchParams({ prompt: trimmed });
     if (hfToken.trim()) params.set("hf", hfToken.trim());
     save({
