@@ -9,14 +9,13 @@ export type ImageModel = "flux" | "flux-realism" | "flux-anime" | "flux-3d" | "t
 
 export type AudioStyle = "music" | "ambience" | "soundfx" | "speech";
 
-// Sizes are kept modest on purpose: smaller images generate faster on the free
-// service and download quickly on mobile data (reliability > raw resolution).
+// Full-resolution output for crisp, detailed images (FLUX handles 1MP+ well).
 export const ASPECT_RATIOS: { value: AspectRatio; label: string; w: number; h: number }[] = [
-  { value: "1:1", label: "Square 1:1", w: 768, h: 768 },
-  { value: "16:9", label: "Wide 16:9", w: 896, h: 504 },
-  { value: "9:16", label: "Portrait 9:16", w: 504, h: 896 },
-  { value: "4:3", label: "Standard 4:3", w: 864, h: 648 },
-  { value: "3:4", label: "Tall 3:4", w: 648, h: 864 },
+  { value: "1:1", label: "Square 1:1", w: 1024, h: 1024 },
+  { value: "16:9", label: "Wide 16:9", w: 1024, h: 576 },
+  { value: "9:16", label: "Portrait 9:16", w: 576, h: 1024 },
+  { value: "4:3", label: "Standard 4:3", w: 1024, h: 768 },
+  { value: "3:4", label: "Tall 3:4", w: 768, h: 1024 },
 ];
 
 // Turbo first: it's the fast, reliable default. Flux looks best but is slower
@@ -136,6 +135,14 @@ export function expandShortPrompt(p: string): string {
 export function withNegative(p: string, negative: string): string {
   const n = negative.trim();
   return n ? `${p}. Avoid: ${n}` : p;
+}
+
+// Append quality/fidelity boosters (helps every prompt look sharper), without
+// duplicating if the prompt already asks for them.
+export function withQuality(p: string): string {
+  const t = p.trim();
+  if (!t || /8k|ultra[- ]?detailed|masterpiece|best quality|high quality/i.test(t)) return t;
+  return `${t.replace(/[.,\s]+$/, "")}, ultra-detailed, high quality, sharp focus, 8k`;
 }
 
 // ---- Free text-to-video: build a cinematic "storyboard" of keyframe prompts ----

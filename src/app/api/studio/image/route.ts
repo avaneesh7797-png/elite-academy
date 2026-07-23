@@ -28,6 +28,24 @@ function imageResponse(buf: ArrayBuffer, contentType: string): Response {
 // api-inference host still answers for some models. Try the router first, then
 // legacy, across a couple of widely-available models, so a valid token works
 // regardless of which path/model HF is currently serving.
+async function hfPost(url: string, token: string, body: unknown, timeoutMs: number): Promise<Response | null> {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "image/png" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
 async function tryHuggingFace(
   prompt: string,
   w: number,
@@ -36,8 +54,12 @@ async function tryHuggingFace(
   token: string,
   budgetMs: number,
 ): Promise<Response | null> {
+  // FLUX.1-dev first — much better prompt adherence + detail than schnell —
+  // then reliable/faster fallbacks. Overridable via STUDIO_HF_MODEL.
   const models = [
-    process.env.STUDIO_HF_MODEL || "black-forest-labs/FLUX.1-schnell",
+    process.env.STUDIO_HF_MODEL || "black-forest-labs/FLUX.1-dev",
+    "stabilityai/stable-diffusion-3.5-large",
+    "black-forest-labs/FLUX.1-schnell",
     "stabilityai/stable-diffusion-xl-base-1.0",
   ];
   const bases = [
@@ -47,45 +69,25 @@ async function tryHuggingFace(
   const combos: string[] = [];
   for (const m of models) for (const b of bases) combos.push(`${b}/${m}`);
 
+  const W = Math.min(1024, Math.max(512, Math.round(w / 16) * 16));
+  const H = Math.min(1024, Math.max(512, Math.round(h / 16) * 16));
   const deadline = Date.now() + budgetMs;
-  let ci = 0;
-  let warmups = 0;
 
-  while (Date.now() < deadline && ci < combos.length) {
-    const url = combos[ci];
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 25000);
-    try {
-      const r = await fetch(url, {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "image/png",
-        },
-        // Minimal payload — many HF image models 400 on unknown parameters.
-        body: JSON.stringify({ inputs: prompt }),
-        cache: "no-store",
-      });
+  for (const url of combos) {
+    if (Date.now() > deadline) break;
+    // Try with size params (bigger / correct aspect), then a minimal payload
+    // fallback (some models 400 on params — the proven path stays working).
+    const bodies = [{ inputs: prompt, parameters: { width: W, height: H } }, { inputs: prompt }];
+    for (const body of bodies) {
+      let r = await hfPost(url, token, body, 30000);
+      if (r && r.status === 503 && Date.now() + 8000 < deadline) {
+        await sleep(6000);
+        r = await hfPost(url, token, body, 30000);
+      }
+      if (!r) continue;
       const ct = r.headers.get("content-type") || "";
-      if (r.ok && ct.startsWith("image/")) {
-        return imageResponse(await r.arrayBuffer(), ct);
-      }
-      // 503 => model warming up: wait once or twice on this combo, then move on.
-      if (r.status === 503 && warmups < 2 && Date.now() + 6000 < deadline) {
-        warmups += 1;
-        await sleep(5000);
-        continue;
-      }
-      // Anything else (404 model not served here, 401, 400…) → try next combo.
-      ci += 1;
-      warmups = 0;
-    } catch {
-      ci += 1;
-      warmups = 0;
-    } finally {
-      clearTimeout(to);
+      if (r.ok && ct.startsWith("image/")) return imageResponse(await r.arrayBuffer(), ct);
+      // Non-image response → try the next body / combo.
     }
   }
   return null;

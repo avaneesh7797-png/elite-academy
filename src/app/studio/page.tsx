@@ -46,6 +46,7 @@ import {
   expandShortPrompt,
   randomPrompt,
   withNegative,
+  withQuality,
   type AspectRatio,
   type AudioDuration,
   type AudioStyle,
@@ -672,7 +673,7 @@ export default function StudioPage() {
     const base = prompt.trim();
     // With a style, use it; otherwise auto-expand a bare short prompt for quality.
     const styledBase = style !== "none" ? applyStyle(base, style) : expandShortPrompt(base);
-    const finalPrompt = withNegative(styledBase, negative);
+    const finalPrompt = withNegative(withQuality(styledBase), negative);
     const created: Creation[] = [];
     for (let i = 0; i < count; i++) {
       setStatus(count > 1 ? `Generating image ${i + 1} of ${count}…` : "Generating image…");
