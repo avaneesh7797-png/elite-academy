@@ -128,9 +128,20 @@ async function callGradio(host: string, fn: string, data: unknown[], budgetMs: n
   return null;
 }
 
-// Auto-discover a Space's text-to-video endpoint and run it.
-async function tryGradioSpace(host: string, prompt: string, budgetMs: number): Promise<string | null> {
-  const info = await fetchWithTimeout(`${host}/gradio_api/info`, 15000);
+// Auto-discover a Space's text-to-video endpoint and run it. `wakeAttempts`
+// retries the info fetch so a cold-starting Space gets picked up once it's up.
+async function tryGradioSpace(
+  host: string,
+  prompt: string,
+  budgetMs: number,
+  wakeAttempts = 1,
+): Promise<string | null> {
+  let info: Response | null = null;
+  for (let i = 0; i < wakeAttempts; i++) {
+    info = await fetchWithTimeout(`${host}/gradio_api/info`, 20000);
+    if (info && info.ok) break;
+    if (i < wakeAttempts - 1) await sleep(8000); // give the Space time to wake
+  }
   if (!info || !info.ok) return null;
   const parsed = (await info.json().catch(() => null)) as Record<string, unknown> | null;
   const named = (parsed?.named_endpoints as Record<string, Record<string, unknown>>) || {};
@@ -178,17 +189,20 @@ export async function GET(req: NextRequest) {
 
   const deadline = Date.now() + 270_000;
 
-  // 1) Keyless public Spaces — no token required.
-  const spaces = (process.env.STUDIO_VIDEO_SPACES || DEFAULT_SPACES.join(","))
+  // 1) Keyless Spaces — no token. YOUR configured Space(s) go first and get
+  // more patience (wake retries + bigger budget); public ones are quick tries.
+  const norm = (h: string) => (h.startsWith("http") ? h : `https://${h}`);
+  const configured = (process.env.STUDIO_VIDEO_SPACES || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((h) => (h.startsWith("http") ? h : `https://${h}`));
+    .map((h) => ({ host: norm(h), wake: 4, budget: 130_000 }));
+  const defaults = DEFAULT_SPACES.map((h) => ({ host: norm(h), wake: 1, budget: 60_000 }));
 
-  for (const host of spaces) {
+  for (const s of [...configured, ...defaults]) {
     if (Date.now() > deadline - 20_000) break;
     try {
-      const url = await tryGradioSpace(host, prompt, 90_000);
+      const url = await tryGradioSpace(s.host, prompt, s.budget, s.wake);
       if (url) return Response.redirect(url, 302);
     } catch {
       /* try next space */
