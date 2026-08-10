@@ -36,8 +36,11 @@ import {
   IMAGE_MODELS,
   MOTION_PRESETS,
   PRO_VIDEO_MODELS,
+  ANIM_FPS,
+  ANIM_FRAME_COUNTS,
   STORY_SHOTS,
   STYLE_PRESETS,
+  buildFrameSequence,
   buildStoryboard,
   VIDEO_DURATIONS,
   accentTheme,
@@ -353,6 +356,8 @@ export default function StudioPage() {
   const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
   const [storyShots, setStoryShots] = useState(6);
+  const [animFrames, setAnimFrames] = useState<number>(24);
+  const [animFps, setAnimFps] = useState<number>(8);
   const [cinematic, setCinematic] = useState(true);
   const [mood, setMood] = useState<Mood>("cinematic");
   const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
@@ -698,12 +703,26 @@ export default function StudioPage() {
 
   async function generateFreeVideo() {
     const base = prompt.trim();
+    const isAnim = motion === "frames" && !videoImage;
     const isStory = motion === "morph" && !videoImage;
     let images: string[];
     let durationMs = videoDuration * 1000;
 
     if (videoImage) {
       images = [videoImage];
+    } else if (isAnim) {
+      // TRUE animation: generate MANY frames (free images), each a micro-step of
+      // the same motion, then play them back as real frames.
+      const shots = buildFrameSequence(base, animFrames);
+      const seed = Math.floor(Math.random() * 1_000_000_000);
+      images = [];
+      for (let i = 0; i < shots.length; i++) {
+        setStatus(`Drawing frame ${i + 1} of ${shots.length}… (free — this takes a few minutes)`);
+        const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
+        const { url } = await requestImage(framePrompt, seed);
+        images.push(url);
+      }
+      durationMs = Math.round((animFrames / animFps) * 1000);
     } else if (isStory) {
       // Free text-to-video: a cinematic storyboard of keyframes for one scene.
       // A single fixed seed keeps the scene consistent across the shots.
@@ -733,7 +752,7 @@ export default function StudioPage() {
       images,
       motion,
       durationMs,
-      fps: 30,
+      fps: isAnim ? animFps : 30,
       ratio,
       cinematic,
       mood: mood !== "none" ? mood : undefined,
@@ -742,9 +761,11 @@ export default function StudioPage() {
       createdAt: Date.now(),
     });
     toast(
-      isStory
-        ? "🎬 Your AI video is ready — it loops below. Tap Export to save the file."
-        : "Video ready — it loops live below. Tap Export to save a file.",
+      isAnim
+        ? "🎞️ True frame-by-frame animation ready — it loops below. Tap Export to save it."
+        : isStory
+          ? "🎬 Your AI video is ready — it loops below. Tap Export to save the file."
+          : "Video ready — it loops live below. Tap Export to save a file.",
     );
   }
 
@@ -1490,6 +1511,38 @@ export default function StudioPage() {
                     ))}
                   </select>
                 </label>
+              )}
+              {motion === "frames" && !videoImage && (
+                <>
+                  <label className="flex items-center gap-2 text-xs text-zinc-400">
+                    Frames
+                    <select
+                      value={animFrames}
+                      onChange={(e) => setAnimFrames(Number(e.target.value))}
+                      className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                    >
+                      {ANIM_FRAME_COUNTS.map((n) => (
+                        <option key={n} value={n}>
+                          {n} frames
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-zinc-400">
+                    Speed
+                    <select
+                      value={animFps}
+                      onChange={(e) => setAnimFps(Number(e.target.value))}
+                      className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
+                    >
+                      {ANIM_FPS.map((f) => (
+                        <option key={f} value={f}>
+                          {f} fps
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
               )}
               {motion === "morph" && !videoImage && (
                 <label className="flex items-center gap-2 text-xs text-zinc-400">

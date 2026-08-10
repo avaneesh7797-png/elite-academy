@@ -133,6 +133,23 @@ export function drawMotionFrame(
   ctx.fillRect(0, 0, W, H);
   if (!imgs.length) return;
 
+  // TRUE frame-by-frame animation: each image IS a frame of the motion. Play
+  // them in sequence (tiny cross-blend to smooth AI jitter) — real animation.
+  if (motion === "frames" && imgs.length > 1) {
+    const n = imgs.length;
+    const f = t * n;
+    const i = Math.floor(f) % n;
+    const frac = f - Math.floor(f);
+    // Slight zoom keeps edges alive; blend the last 25% into the next frame so
+    // model-to-model jitter reads as motion blur rather than popping.
+    drawCover(ctx, imgs[i], W, H, 1.02, 0, 0, 1);
+    if (frac > 0.75) {
+      drawCover(ctx, imgs[(i + 1) % n], W, H, 1.02, 0, 0, (frac - 0.75) / 0.25);
+    }
+    if (cinematic) applyCinematic(ctx, W, H);
+    return;
+  }
+
   if (motion === "morph" && imgs.length > 1) {
     // Cinematic multi-frame ("story") render: each keyframe gets its own Ken
     // Burns pan/zoom, and consecutive frames crossfade — so it feels like a

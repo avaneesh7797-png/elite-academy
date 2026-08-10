@@ -177,6 +177,41 @@ export function buildStoryboard(base: string, n: number): string[] {
   return out;
 }
 
+// ---- FRAME-BY-FRAME animation: generate MANY images, each a micro-step of the
+// same motion, then play them back fast. Images are free, so we trade time for
+// real animation instead of paying for a video GPU. A fixed seed + "same scene"
+// wording keeps frames coherent; the phase text nudges the motion forward.
+export const ANIM_FRAME_COUNTS = [12, 24, 36, 48] as const;
+export type AnimFrames = (typeof ANIM_FRAME_COUNTS)[number];
+
+export const ANIM_FPS = [6, 8, 12] as const;
+export type AnimFps = (typeof ANIM_FPS)[number];
+
+// Describes where we are in the motion, in plain cinematic language.
+function motionPhase(t: number): string {
+  const pct = Math.round(t * 100);
+  if (t < 0.15) return "the very beginning of the motion, just starting to move";
+  if (t < 0.35) return `early in the motion, ${pct}% of the way through the action`;
+  if (t < 0.65) return `the middle of the motion, ${pct}% through, peak movement`;
+  if (t < 0.85) return `late in the motion, ${pct}% through, movement continuing`;
+  return "the end of the motion, the action completing";
+}
+
+// Returns `n` prompts describing consecutive moments of ONE continuous shot.
+export function buildFrameSequence(base: string, n: number): string[] {
+  const clean = base.trim().replace(/[.,\s]+$/, "") || "a cinematic scene";
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = n <= 1 ? 0 : i / (n - 1);
+    out.push(
+      `${clean}. Single continuous shot, frame ${i + 1} of ${n}: ${motionPhase(t)}. ` +
+        `Exact same scene, same characters, same camera angle, same lighting and colors as the other frames — ` +
+        `only the motion advances slightly. Cinematic still, highly detailed, sharp focus.`,
+    );
+  }
+  return out;
+}
+
 export const RANDOM_PROMPTS: string[] = [
   "A bioluminescent jellyfish floating through a dark coral reef, macro photography",
   "An astronaut planting a glowing flower on a red alien planet, cinematic",
@@ -206,6 +241,7 @@ export function randomPrompt(): string {
 
 // ---- Free in-browser video: motion presets ----
 export type Motion =
+  | "frames"
   | "kenburns"
   | "zoom-in"
   | "zoom-out"
@@ -217,6 +253,7 @@ export type Motion =
   | "morph";
 
 export const MOTION_PRESETS: { value: Motion; label: string; needsFrames?: boolean }[] = [
+  { value: "frames", label: "True animation 🎞️ (many frames)", needsFrames: true },
   { value: "kenburns", label: "Ken Burns" },
   { value: "zoom-in", label: "Zoom in" },
   { value: "zoom-out", label: "Zoom out" },
