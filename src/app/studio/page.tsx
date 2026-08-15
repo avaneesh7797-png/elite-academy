@@ -1200,10 +1200,22 @@ export default function StudioPage() {
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-semibold text-emerald-100">Free AI video from text ✨</h2>
               <p className="mt-0.5 text-xs text-emerald-200/70">
-                Type a scene and get a real cinematic clip — built from AI keyframes right on your phone, then export
-                the file. No paid API, no Replicate credit. Or animate your own photo.
+                Type a scene and get a real video — the free engine draws many AI frames on your phone and plays them
+                back as true animation, then exports the file. No paid API, no credit.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setMode("video");
+                    setVideoEngine("free");
+                    setMotion("frames");
+                    setVideoImage(null);
+                    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
+                >
+                  <Film className="h-4 w-4" /> True animation 🎞️ (many frames)
+                </button>
                 <button
                   onClick={() => {
                     setMode("video");
@@ -1212,9 +1224,9 @@ export default function StudioPage() {
                     setVideoImage(null);
                     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/60 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-900/30"
                 >
-                  <Film className="h-4 w-4" /> Make an AI video from text
+                  <Video className="h-4 w-4" /> Cinematic (fast)
                 </button>
                 <button
                   onClick={startPhotoToVideo}
@@ -1514,6 +1526,9 @@ export default function StudioPage() {
               )}
               {motion === "frames" && !videoImage && (
                 <>
+                  <span className="w-full text-[11px] text-emerald-300/80">
+                    🎞️ True animation: draws {animFrames} free AI frames, then plays them back — takes a few minutes.
+                  </span>
                   <label className="flex items-center gap-2 text-xs text-zinc-400">
                     Frames
                     <select
