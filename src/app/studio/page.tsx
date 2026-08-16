@@ -714,25 +714,29 @@ export default function StudioPage() {
       // TRUE animation: generate MANY frames (free images), each a micro-step of
       // the same motion, then play them back as real frames.
       const shots = buildFrameSequence(base, animFrames);
-      const seed = Math.floor(Math.random() * 1_000_000_000);
+      // Each frame needs its OWN seed: the image proxy caches by prompt+seed,
+      // so reusing one seed returns the identical picture every time (no
+      // animation). Keeping the seeds adjacent still keeps the look coherent.
+      const baseSeed = Math.floor(Math.random() * 1_000_000_000);
       images = [];
       for (let i = 0; i < shots.length; i++) {
         setStatus(`Drawing frame ${i + 1} of ${shots.length}… (free — this takes a few minutes)`);
         const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
-        const { url } = await requestImage(framePrompt, seed);
+        const { url } = await requestImage(framePrompt, baseSeed + i);
         images.push(url);
       }
       durationMs = Math.round((animFrames / animFps) * 1000);
     } else if (isStory) {
       // Free text-to-video: a cinematic storyboard of keyframes for one scene.
-      // A single fixed seed keeps the scene consistent across the shots.
+      // Adjacent seeds keep the look coherent while still giving each shot its
+      // own image (one shared seed would be served from cache = identical shots).
       const shots = buildStoryboard(base, storyShots);
-      const seed = Math.floor(Math.random() * 1_000_000_000);
+      const baseSeed = Math.floor(Math.random() * 1_000_000_000);
       images = [];
       for (let i = 0; i < shots.length; i++) {
         setStatus(`Filming shot ${i + 1} of ${shots.length}…`);
         const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
-        const { url } = await requestImage(framePrompt, seed);
+        const { url } = await requestImage(framePrompt, baseSeed + i);
         images.push(url);
       }
       durationMs = storyShots * 1100; // ~1.1s per shot
@@ -782,12 +786,12 @@ export default function StudioPage() {
     setBusy(true);
     try {
       const shots = buildStoryboard(basePrompt, storyShots);
-      const seed = Math.floor(Math.random() * 1_000_000_000);
+      const baseSeed = Math.floor(Math.random() * 1_000_000_000);
       const images: string[] = [];
       for (let i = 0; i < shots.length; i++) {
         setStatus(`Filming shot ${i + 1} of ${shots.length}…`);
         const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
-        const { url } = await requestImage(framePrompt, seed);
+        const { url } = await requestImage(framePrompt, baseSeed + i);
         images.push(url);
       }
       save({

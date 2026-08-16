@@ -198,15 +198,16 @@ function motionPhase(t: number): string {
 }
 
 // Returns `n` prompts describing consecutive moments of ONE continuous shot.
+// Kept compact: the API caps prompts at 1200 chars, and long boilerplate
+// dilutes the part that actually differs between frames (the motion phase).
 export function buildFrameSequence(base: string, n: number): string[] {
-  const clean = base.trim().replace(/[.,\s]+$/, "") || "a cinematic scene";
+  const clean = base.trim().replace(/[.,\s]+$/, "").slice(0, 700) || "a cinematic scene";
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const t = n <= 1 ? 0 : i / (n - 1);
     out.push(
-      `${clean}. Single continuous shot, frame ${i + 1} of ${n}: ${motionPhase(t)}. ` +
-        `Exact same scene, same characters, same camera angle, same lighting and colors as the other frames — ` +
-        `only the motion advances slightly. Cinematic still, highly detailed, sharp focus.`,
+      `${clean}. Frame ${i + 1}/${n} of one continuous shot: ${motionPhase(t)}. ` +
+        `Same scene, same camera, same lighting. Cinematic still, sharp focus.`,
     );
   }
   return out;
