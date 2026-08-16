@@ -133,19 +133,38 @@ export function drawMotionFrame(
   ctx.fillRect(0, 0, W, H);
   if (!imgs.length) return;
 
-  // TRUE frame-by-frame animation: each image IS a frame of the motion. Play
-  // them in sequence (tiny cross-blend to smooth AI jitter) — real animation.
+  // TRUE frame-by-frame animation with CONTINUOUS interpolation.
+  //
+  // Each AI frame is drawn independently, so playing them straight looks like
+  // "photos sped up" — every frame pops. Instead we blend across the WHOLE gap
+  // between consecutive frames (optical-dissolve style) and add a tiny
+  // sub-frame camera drift, so the eye reads continuous motion like real video
+  // rather than a slideshow. Three overlapping layers smooth it further.
   if (motion === "frames" && imgs.length > 1) {
     const n = imgs.length;
     const f = t * n;
     const i = Math.floor(f) % n;
     const frac = f - Math.floor(f);
-    // Slight zoom keeps edges alive; blend the last 25% into the next frame so
-    // model-to-model jitter reads as motion blur rather than popping.
-    drawCover(ctx, imgs[i], W, H, 1.02, 0, 0, 1);
-    if (frac > 0.75) {
-      drawCover(ctx, imgs[(i + 1) % n], W, H, 1.02, 0, 0, (frac - 0.75) / 0.25);
+    const s = easeInOut(frac); // eased blend = no hard cut at frame borders
+
+    const prev = imgs[(i - 1 + n) % n];
+    const cur = imgs[i];
+    const next = imgs[(i + 1) % n];
+
+    // Sub-frame drift: a continuous micro push-in across each frame keeps the
+    // image physically moving even while the AI content is static.
+    const zA = 1.03 + 0.02 * frac;
+    const zB = 1.03 + 0.02 * (frac - 1);
+    const dx = 0.02 * (frac - 0.5);
+
+    // Tail of the previous frame keeps motion alive through the hand-off.
+    if (frac < 0.25) {
+      drawCover(ctx, prev, W, H, zA + 0.02, dx, 0, 1 - frac / 0.25);
     }
+    // Current frame fades out as the next fades in — always cross-dissolving.
+    drawCover(ctx, cur, W, H, zA, dx, 0, 1 - s * 0.85);
+    drawCover(ctx, next, W, H, zB + 0.02, dx, 0, s * 0.85);
+
     if (cinematic) applyCinematic(ctx, W, H);
     return;
   }

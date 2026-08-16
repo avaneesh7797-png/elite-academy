@@ -181,33 +181,37 @@ export function buildStoryboard(base: string, n: number): string[] {
 // same motion, then play them back fast. Images are free, so we trade time for
 // real animation instead of paying for a video GPU. A fixed seed + "same scene"
 // wording keeps frames coherent; the phase text nudges the motion forward.
-export const ANIM_FRAME_COUNTS = [12, 24, 36, 48] as const;
+// More frames = smaller jump between each = smoother motion. The renderer
+// cross-dissolves continuously between them, so even 24 reads as motion, but
+// 48-96 gets genuinely video-like (at the cost of generation time).
+export const ANIM_FRAME_COUNTS = [16, 24, 48, 72, 96] as const;
 export type AnimFrames = (typeof ANIM_FRAME_COUNTS)[number];
 
-export const ANIM_FPS = [6, 8, 12] as const;
+// Playback speed. Higher fps + more frames = closest to real video.
+export const ANIM_FPS = [8, 12, 16, 24] as const;
 export type AnimFps = (typeof ANIM_FPS)[number];
 
-// Describes where we are in the motion, in plain cinematic language.
+// Describes where we are in the motion as a precise percentage. Being explicit
+// and incremental ("just 2% further than the last frame") keeps consecutive
+// frames close together, which is what makes playback read as video.
 function motionPhase(t: number): string {
   const pct = Math.round(t * 100);
-  if (t < 0.15) return "the very beginning of the motion, just starting to move";
-  if (t < 0.35) return `early in the motion, ${pct}% of the way through the action`;
-  if (t < 0.65) return `the middle of the motion, ${pct}% through, peak movement`;
-  if (t < 0.85) return `late in the motion, ${pct}% through, movement continuing`;
-  return "the end of the motion, the action completing";
+  return `exactly ${pct}% through the action — only a tiny increment further than the previous frame`;
 }
 
 // Returns `n` prompts describing consecutive moments of ONE continuous shot.
 // Kept compact: the API caps prompts at 1200 chars, and long boilerplate
 // dilutes the part that actually differs between frames (the motion phase).
 export function buildFrameSequence(base: string, n: number): string[] {
-  const clean = base.trim().replace(/[.,\s]+$/, "").slice(0, 700) || "a cinematic scene";
+  const clean = base.trim().replace(/[.,\s]+$/, "").slice(0, 600) || "a cinematic scene";
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const t = n <= 1 ? 0 : i / (n - 1);
     out.push(
-      `${clean}. Frame ${i + 1}/${n} of one continuous shot: ${motionPhase(t)}. ` +
-        `Same scene, same camera, same lighting. Cinematic still, sharp focus.`,
+      `${clean}. Video frame ${i + 1}/${n} from one locked-off shot: ${motionPhase(t)}. ` +
+        `Identical composition, identical subject appearance, identical background, ` +
+        `identical lighting and color grade in every frame; the camera does not move. ` +
+        `Photorealistic film frame, motion blur, sharp focus.`,
     );
   }
   return out;
