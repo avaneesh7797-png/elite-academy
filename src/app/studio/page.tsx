@@ -714,10 +714,14 @@ export default function StudioPage() {
       // TRUE animation: generate MANY frames (free images), each a micro-step of
       // the same motion, then play them back as real frames.
       const shots = buildFrameSequence(base, animFrames);
-      // Each frame needs its OWN seed: the image proxy caches by prompt+seed,
-      // so reusing one seed returns the identical picture every time (no
-      // animation). Keeping the seeds adjacent still keeps the look coherent.
-      const baseSeed = Math.floor(Math.random() * 1_000_000_000);
+      // CRITICAL: every frame uses the SAME seed. In diffusion models the seed
+      // fixes the whole composition — same seed means the same car, background,
+      // framing and lighting in every frame, and only the (slightly different)
+      // prompt advances the motion. Varying the seed per frame produces a
+      // completely different picture each time, which looks like random photos.
+      // Caching isn't a concern: each frame's prompt differs, so the cache key
+      // (prompt+seed) is already unique per frame.
+      const fixedSeed = Math.floor(Math.random() * 1_000_000_000);
       images = new Array<string>(shots.length);
       // Generate in small parallel batches — 48-96 frames one-at-a-time would
       // take far too long, and the free image service handles a few at once.
@@ -729,7 +733,7 @@ export default function StudioPage() {
           slice.map(async (shot, k) => {
             const idx = start + k;
             const framePrompt = style !== "none" ? applyStyle(shot, style) : shot;
-            const { url } = await requestImage(framePrompt, baseSeed + idx);
+            const { url } = await requestImage(framePrompt, fixedSeed);
             images[idx] = url;
           }),
         );
