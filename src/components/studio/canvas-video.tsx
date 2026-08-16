@@ -46,6 +46,7 @@ export default function CanvasVideo({
 
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [musicOn, setMusicOn] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -67,19 +68,38 @@ export default function CanvasVideo({
   }, []);
 
   // Load the frame images for display (no crossOrigin → max compatibility).
+  //
+  // Resilient on purpose: a single stalled frame used to hang the whole clip on
+  // "Preparing motion…" forever (Promise.all never settles). Now each frame has
+  // its own timeout, failures are skipped, and we play with whatever loaded.
   useEffect(() => {
     let alive = true;
     setReady(false);
     setFailed(false);
-    Promise.all(images.map((src) => loadImage(src, false)))
-      .then((imgs) => {
-        if (!alive) return;
-        imgsRef.current = imgs;
-        setReady(true);
-      })
-      .catch(() => {
-        if (alive) setFailed(true);
-      });
+    setLoaded(0);
+
+    const withTimeout = (src: string) =>
+      Promise.race([
+        loadImage(src, false),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 30000)),
+      ])
+        .then((img) => {
+          if (alive) setLoaded((c) => c + 1);
+          return img as HTMLImageElement;
+        })
+        .catch(() => null);
+
+    Promise.all(images.map(withTimeout)).then((results) => {
+      if (!alive) return;
+      const ok = results.filter((r): r is HTMLImageElement => !!r);
+      if (!ok.length) {
+        setFailed(true);
+        return;
+      }
+      imgsRef.current = ok;
+      setReady(true);
+    });
+
     return () => {
       alive = false;
     };
@@ -191,9 +211,17 @@ export default function CanvasVideo({
           Couldn&apos;t load the source frame(s) for this clip.
         </div>
       ) : !ready ? (
-        <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-black">
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-black px-6">
           <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-          <span className="text-[11px] text-zinc-600">Preparing motion…</span>
+          <span className="text-[11px] text-zinc-500">
+            Loading frames {loaded}/{images.length}…
+          </span>
+          <div className="h-1 w-40 overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full bg-emerald-500 transition-all"
+              style={{ width: `${images.length ? (loaded / images.length) * 100 : 0}%` }}
+            />
+          </div>
         </div>
       ) : (
         <canvas ref={canvasRef} className="block w-full" />
