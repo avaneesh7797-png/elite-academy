@@ -29,6 +29,8 @@ const bodySchema = z.object({
   // Source image for image-to-video (remote URL or data: URI). Capped so a
   // base64 upload stays under serverless body limits — the client downscales.
   image: z.string().max(8_000_000).optional(),
+  // Previous frame URL for image-to-image animation chaining.
+  init: z.string().max(4000).optional(),
 });
 
 // Allowlisted pro text-to-video models + how to build each one's input.
@@ -64,6 +66,7 @@ function buildImageUrl(
   seed: number,
   pollToken?: string,
   hfToken?: string,
+  init?: string,
 ): string {
   const { w, h } = dimensionsFor(ratio as never);
   const params = new URLSearchParams({
@@ -75,6 +78,8 @@ function buildImageUrl(
   });
   if (pollToken) params.set("k", pollToken);
   if (hfToken) params.set("hf", hfToken);
+  // Previous animation frame → image-to-image edit (keeps frames continuous).
+  if (init) params.set("init", init);
   return `/api/studio/image?${params.toString()}`;
 }
 
@@ -148,7 +153,7 @@ export async function POST(req: NextRequest) {
     const seed = parsed.seed ?? Math.floor(Math.random() * 1_000_000_000);
     const pollToken = req.headers.get("x-pollinations-key")?.trim() || undefined;
     const hfToken = req.headers.get("x-hf-key")?.trim() || undefined;
-    const url = buildImageUrl(parsed.prompt, ratio, parsed.model ?? "turbo", seed, pollToken, hfToken);
+    const url = buildImageUrl(parsed.prompt, ratio, parsed.model ?? "turbo", seed, pollToken, hfToken, parsed.init);
     return NextResponse.json({ kind: "image", url, prompt: parsed.prompt, seed });
   }
 

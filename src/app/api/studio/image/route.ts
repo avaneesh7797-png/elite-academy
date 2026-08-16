@@ -94,14 +94,27 @@ async function tryHuggingFace(
 }
 
 // --- Provider 2: Pollinations (keyless, rate-limited; token optional) ---
-function pollUrl(prompt: string, w: number, h: number, seed: number, model: string, token?: string): string {
+// `init` enables image-to-image: Pollinations' editing models (kontext) take a
+// source image and modify it per the prompt. Chaining frame N -> N+1 this way
+// is what gives free "animation" real continuity, since each frame is an edit
+// of the previous one rather than a fresh draw.
+function pollUrl(
+  prompt: string,
+  w: number,
+  h: number,
+  seed: number,
+  model: string,
+  token?: string,
+  init?: string,
+): string {
   const params = new URLSearchParams({
     width: String(w),
     height: String(h),
     seed: String(seed),
-    model,
+    model: init ? "kontext" : model,
     nologo: "true",
   });
+  if (init) params.set("image", init);
   if (token) params.set("token", token);
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
 }
@@ -134,12 +147,19 @@ async function tryPollinations(
   model: string,
   token: string | undefined,
   budgetMs: number,
+  init?: string,
 ): Promise<Response | null> {
-  const urls = [
-    pollUrl(prompt, w, h, seed, model, token),
-    pollUrl(prompt, Math.min(512, w), Math.min(512, h), seed, "turbo", token),
-  ];
-  if (model !== "flux") urls.push(pollUrl(prompt, Math.min(640, w), Math.min(640, h), seed, "flux", token));
+  // With an init image, image-to-image is the whole point — don't silently fall
+  // back to a fresh text-only draw, that's what breaks animation continuity.
+  const urls = init
+    ? [pollUrl(prompt, w, h, seed, model, token, init)]
+    : [
+        pollUrl(prompt, w, h, seed, model, token),
+        pollUrl(prompt, Math.min(512, w), Math.min(512, h), seed, "turbo", token),
+      ];
+  if (!init && model !== "flux") {
+    urls.push(pollUrl(prompt, Math.min(640, w), Math.min(640, h), seed, "flux", token));
+  }
 
   const deadline = Date.now() + budgetMs;
   let i = 0;
@@ -204,6 +224,16 @@ export async function GET(req: NextRequest) {
       }
     }
     return Response.json(report);
+  }
+
+  // Image-to-image: `init` is the previous animation frame. Only Pollinations'
+  // editing model supports it, so skip the HF text-only path entirely — an
+  // init-less fallback would break the frame-to-frame continuity we need.
+  const init = sp.get("init") || undefined;
+  if (init) {
+    const edited = await tryPollinations(prompt, w, h, seed, model, pollToken, 60000, init);
+    if (edited) return edited;
+    return new Response("Couldn't edit the previous frame (image-to-image unavailable).", { status: 503 });
   }
 
   // Prefer Hugging Face when a token is present (far more reliable than the

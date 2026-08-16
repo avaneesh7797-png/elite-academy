@@ -99,6 +99,13 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// The instruction given to the image-EDIT model for each subsequent animation
+// frame. It edits the previous frame rather than drawing a new scene, which is
+// what preserves the subject between frames.
+const EDIT_STEP_PROMPT =
+  "Keep everything exactly the same — same subject, same style, same background, same camera angle and lighting. " +
+  "Advance the motion by one small step, as if this were the very next frame of a video. Add subtle motion blur.";
+
 // Last-resort fallback when an image stalls. Our primary URL is the same-origin
 // proxy (/api/studio/image); if that fails we hit the upstream service directly
 // (a different network path, with no serverless timeout). For an already-direct
@@ -666,11 +673,17 @@ export default function StudioPage() {
   }
 
   // ---- Free image generation (Pollinations) ----
-  async function requestImage(finalPrompt: string, seed: number): Promise<{ url: string; seed: number }> {
+  // `init` (a previous frame's URL) turns this into an image-to-image EDIT of
+  // that frame — the basis of coherent free animation.
+  async function requestImage(
+    finalPrompt: string,
+    seed: number,
+    init?: string,
+  ): Promise<{ url: string; seed: number }> {
     const res = await fetch("/api/studio/generate", {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ mode: "image", prompt: finalPrompt, ratio, model, seed }),
+      body: JSON.stringify({ mode: "image", prompt: finalPrompt, ratio, model, seed, init }),
     });
     const data = await res.json();
     if (data.error) throw new Error(friendlyError(data.message || data.error));
@@ -725,21 +738,31 @@ export default function StudioPage() {
       // Caching isn't a concern: each frame's prompt differs, so the cache key
       // (prompt+seed) is already unique per frame.
       const fixedSeed = Math.floor(Math.random() * 1_000_000_000);
-      images = new Array<string>(shots.length);
-      // Generate in small parallel batches — 48-96 frames one-at-a-time would
-      // take far too long, and the free image service handles a few at once.
-      const BATCH = 4;
-      for (let start = 0; start < shots.length; start += BATCH) {
-        const slice = shots.slice(start, start + BATCH);
-        setStatus(`Drawing frames ${start + 1}–${Math.min(start + BATCH, shots.length)} of ${shots.length}…`);
-        await Promise.all(
-          slice.map(async (shot, k) => {
-            const idx = start + k;
-            const framePrompt = style !== "none" ? applyStyle(shot, style) : shot;
-            const { url } = await requestImage(framePrompt, fixedSeed);
-            images[idx] = url;
-          }),
-        );
+      images = [];
+
+      // CHAINED image-to-image: frame 1 is drawn normally, then every later
+      // frame is an EDIT of the frame before it ("advance the motion slightly").
+      // Because each frame starts from the actual previous picture, the subject
+      // and background carry over — that continuity is what makes it read as
+      // video instead of a set of separate pictures. It has to run in order.
+      const first = style !== "none" ? applyStyle(shots[0], style) : shots[0];
+      setStatus(`Drawing frame 1 of ${shots.length}…`);
+      const firstFrame = await requestImage(first, fixedSeed);
+      images.push(firstFrame.url);
+
+      const absolute = (u: string) =>
+        typeof window !== "undefined" && u.startsWith("/") ? `${window.location.origin}${u}` : u;
+
+      for (let i = 1; i < shots.length; i++) {
+        setStatus(`Drawing frame ${i + 1} of ${shots.length}… (continuing from the last frame)`);
+        try {
+          const { url } = await requestImage(EDIT_STEP_PROMPT, fixedSeed, absolute(images[i - 1]));
+          images.push(url);
+        } catch {
+          // If the edit step fails, hold the previous frame rather than aborting
+          // the whole clip or splicing in an unrelated picture.
+          images.push(images[i - 1]);
+        }
       }
       // Play for the length the user asked for. (If the frame count was capped,
       // the frames simply hold slightly longer rather than the clip shrinking.)
