@@ -181,15 +181,25 @@ export function buildStoryboard(base: string, n: number): string[] {
 // same motion, then play them back fast. Images are free, so we trade time for
 // real animation instead of paying for a video GPU. A fixed seed + "same scene"
 // wording keeps frames coherent; the phase text nudges the motion forward.
-// More frames = smaller jump between each = smoother motion. The renderer
-// cross-dissolves continuously between them, so even 24 reads as motion, but
-// 48-96 gets genuinely video-like (at the cost of generation time).
-export const ANIM_FRAME_COUNTS = [16, 24, 48, 72, 96] as const;
-export type AnimFrames = (typeof ANIM_FRAME_COUNTS)[number];
+// You pick how LONG the video should be; the app works out how many frames it
+// needs to look smooth. Longer clip = more frames = longer to generate.
+export const ANIM_SECONDS = [3, 5, 8, 12, 20] as const;
+export type AnimSeconds = (typeof ANIM_SECONDS)[number];
 
-// Playback speed. Higher fps + more frames = closest to real video.
-export const ANIM_FPS = [8, 12, 16, 24] as const;
-export type AnimFps = (typeof ANIM_FPS)[number];
+// Smoothness presets → playback fps. Frames needed = seconds × fps.
+export const ANIM_SMOOTHNESS = [
+  { value: 8, label: "Quick (8 fps)" },
+  { value: 12, label: "Smooth (12 fps)" },
+  { value: 16, label: "Very smooth (16 fps)" },
+] as const;
+
+// Hard cap so a 20s × 16fps request can't queue 320 image generations.
+export const ANIM_MAX_FRAMES = 160;
+
+// How many frames to actually draw for a given length + smoothness.
+export function framesForVideo(seconds: number, fps: number): number {
+  return Math.max(8, Math.min(ANIM_MAX_FRAMES, Math.round(seconds * fps)));
+}
 
 // Where we are in the motion. Kept to a SHORT, uniform phrase: with a fixed
 // seed, the smaller the textual difference between frames, the more the model

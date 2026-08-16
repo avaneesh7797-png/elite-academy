@@ -36,8 +36,9 @@ import {
   IMAGE_MODELS,
   MOTION_PRESETS,
   PRO_VIDEO_MODELS,
-  ANIM_FPS,
-  ANIM_FRAME_COUNTS,
+  ANIM_SECONDS,
+  ANIM_SMOOTHNESS,
+  framesForVideo,
   STORY_SHOTS,
   STYLE_PRESETS,
   buildFrameSequence,
@@ -356,8 +357,10 @@ export default function StudioPage() {
   const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
   const [storyShots, setStoryShots] = useState(6);
-  const [animFrames, setAnimFrames] = useState<number>(48);
+  // You choose the video LENGTH + smoothness; frames are computed from those.
+  const [animSeconds, setAnimSeconds] = useState<number>(5);
   const [animFps, setAnimFps] = useState<number>(12);
+  const animFrames = framesForVideo(animSeconds, animFps);
   const [cinematic, setCinematic] = useState(true);
   const [mood, setMood] = useState<Mood>("cinematic");
   const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
@@ -738,7 +741,9 @@ export default function StudioPage() {
           }),
         );
       }
-      durationMs = Math.round((animFrames / animFps) * 1000);
+      // Play for the length the user asked for. (If the frame count was capped,
+      // the frames simply hold slightly longer rather than the clip shrinking.)
+      durationMs = animSeconds * 1000;
     } else if (isStory) {
       // Free text-to-video: a cinematic storyboard of keyframes for one scene.
       // Adjacent seeds keep the look coherent while still giving each shot its
@@ -1543,38 +1548,38 @@ export default function StudioPage() {
               )}
               {motion === "frames" && !videoImage && (
                 <>
-                  <span className="w-full text-[11px] text-emerald-300/80">
-                    🎞️ Draws {animFrames} AI frames and cross-blends them into continuous motion (~
-                    {Math.max(1, Math.round(animFrames / 12))} min). More frames = smoother, more video-like.
-                  </span>
                   <label className="flex items-center gap-2 text-xs text-zinc-400">
-                    Frames
+                    Length
                     <select
-                      value={animFrames}
-                      onChange={(e) => setAnimFrames(Number(e.target.value))}
+                      value={animSeconds}
+                      onChange={(e) => setAnimSeconds(Number(e.target.value))}
                       className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
                     >
-                      {ANIM_FRAME_COUNTS.map((n) => (
-                        <option key={n} value={n}>
-                          {n} frames
+                      {ANIM_SECONDS.map((s) => (
+                        <option key={s} value={s}>
+                          {s} seconds
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="flex items-center gap-2 text-xs text-zinc-400">
-                    Speed
+                    Smoothness
                     <select
                       value={animFps}
                       onChange={(e) => setAnimFps(Number(e.target.value))}
                       className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:outline-none"
                     >
-                      {ANIM_FPS.map((f) => (
-                        <option key={f} value={f}>
-                          {f} fps
+                      {ANIM_SMOOTHNESS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
                         </option>
                       ))}
                     </select>
                   </label>
+                  <span className="w-full text-[11px] text-emerald-300/80">
+                    🎞️ Auto: {animFrames} frames for a {animSeconds}s clip — takes roughly{" "}
+                    {Math.max(1, Math.round(animFrames / 10))} min to draw.
+                  </span>
                 </>
               )}
               {motion === "morph" && !videoImage && (
