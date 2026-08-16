@@ -191,12 +191,11 @@ export type AnimFrames = (typeof ANIM_FRAME_COUNTS)[number];
 export const ANIM_FPS = [8, 12, 16, 24] as const;
 export type AnimFps = (typeof ANIM_FPS)[number];
 
-// Describes where we are in the motion as a precise percentage. Being explicit
-// and incremental ("just 2% further than the last frame") keeps consecutive
-// frames close together, which is what makes playback read as video.
+// Where we are in the motion. Kept to a SHORT, uniform phrase: with a fixed
+// seed, the smaller the textual difference between frames, the more the model
+// keeps the same composition and only advances the movement.
 function motionPhase(t: number): string {
-  const pct = Math.round(t * 100);
-  return `exactly ${pct}% through the action — only a tiny increment further than the previous frame`;
+  return `t=${(Math.round(t * 100) / 100).toFixed(2)}`;
 }
 
 // Returns `n` prompts describing consecutive moments of ONE continuous shot.
@@ -207,11 +206,13 @@ export function buildFrameSequence(base: string, n: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const t = n <= 1 ? 0 : i / (n - 1);
+    // The shared text is byte-identical across frames; only the tiny timestamp
+    // differs. With a fixed seed this yields the same scene with the action
+    // slightly advanced, instead of a brand-new picture per frame.
     out.push(
-      `${clean}. Video frame ${i + 1}/${n} from one locked-off shot: ${motionPhase(t)}. ` +
-        `Identical composition, identical subject appearance, identical background, ` +
-        `identical lighting and color grade in every frame; the camera does not move. ` +
-        `Photorealistic film frame, motion blur, sharp focus.`,
+      `${clean}. Single locked-off cinematic shot, identical framing and lighting ` +
+        `in every frame, subject mid-motion with motion blur, photorealistic film still. ` +
+        `[${motionPhase(t)}]`,
     );
   }
   return out;
