@@ -356,8 +356,8 @@ export default function StudioPage() {
   const [videoModel, setVideoModel] = useState("wan-video/wan-2.1-1.3b");
   const [motion, setMotion] = useState<Motion>("kenburns");
   const [storyShots, setStoryShots] = useState(6);
-  const [animFrames, setAnimFrames] = useState<number>(24);
-  const [animFps, setAnimFps] = useState<number>(8);
+  const [animFrames, setAnimFrames] = useState<number>(48);
+  const [animFps, setAnimFps] = useState<number>(12);
   const [cinematic, setCinematic] = useState(true);
   const [mood, setMood] = useState<Mood>("cinematic");
   const [videoDuration, setVideoDuration] = useState<VideoDuration>(4);
@@ -718,12 +718,21 @@ export default function StudioPage() {
       // so reusing one seed returns the identical picture every time (no
       // animation). Keeping the seeds adjacent still keeps the look coherent.
       const baseSeed = Math.floor(Math.random() * 1_000_000_000);
-      images = [];
-      for (let i = 0; i < shots.length; i++) {
-        setStatus(`Drawing frame ${i + 1} of ${shots.length}… (free — this takes a few minutes)`);
-        const framePrompt = style !== "none" ? applyStyle(shots[i], style) : shots[i];
-        const { url } = await requestImage(framePrompt, baseSeed + i);
-        images.push(url);
+      images = new Array<string>(shots.length);
+      // Generate in small parallel batches — 48-96 frames one-at-a-time would
+      // take far too long, and the free image service handles a few at once.
+      const BATCH = 4;
+      for (let start = 0; start < shots.length; start += BATCH) {
+        const slice = shots.slice(start, start + BATCH);
+        setStatus(`Drawing frames ${start + 1}–${Math.min(start + BATCH, shots.length)} of ${shots.length}…`);
+        await Promise.all(
+          slice.map(async (shot, k) => {
+            const idx = start + k;
+            const framePrompt = style !== "none" ? applyStyle(shot, style) : shot;
+            const { url } = await requestImage(framePrompt, baseSeed + idx);
+            images[idx] = url;
+          }),
+        );
       }
       durationMs = Math.round((animFrames / animFps) * 1000);
     } else if (isStory) {
@@ -1531,7 +1540,8 @@ export default function StudioPage() {
               {motion === "frames" && !videoImage && (
                 <>
                   <span className="w-full text-[11px] text-emerald-300/80">
-                    🎞️ True animation: draws {animFrames} free AI frames, then plays them back — takes a few minutes.
+                    🎞️ Draws {animFrames} AI frames and cross-blends them into continuous motion (~
+                    {Math.max(1, Math.round(animFrames / 12))} min). More frames = smoother, more video-like.
                   </span>
                   <label className="flex items-center gap-2 text-xs text-zinc-400">
                     Frames
