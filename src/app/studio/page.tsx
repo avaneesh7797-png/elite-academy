@@ -386,6 +386,7 @@ export default function StudioPage() {
   const [token, setToken] = useState("");
   const [pollToken, setPollToken] = useState("");
   const [hfToken, setHfToken] = useState("");
+  const [gpuUrl, setGpuUrl] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -413,6 +414,7 @@ export default function StudioPage() {
     setToken(s.replicateToken);
     setPollToken(s.pollinationsToken);
     setHfToken(s.hfToken);
+    setGpuUrl(s.gpuUrl || "");
     setName(s.name);
     setEmail(s.email);
     setAccent(s.accent || "indigo");
@@ -438,6 +440,7 @@ export default function StudioPage() {
       replicateToken: string;
       pollinationsToken: string;
       hfToken: string;
+      gpuUrl: string;
       name: string;
       email: string;
       accent: string;
@@ -447,6 +450,7 @@ export default function StudioPage() {
       replicateToken: token.trim(),
       pollinationsToken: pollToken.trim(),
       hfToken: hfToken.trim(),
+      gpuUrl: gpuUrl.trim(),
       name: name.trim(),
       email: email.trim(),
       accent,
@@ -459,14 +463,16 @@ export default function StudioPage() {
     if (token.trim()) h["x-studio-key"] = token.trim();
     if (pollToken.trim()) h["x-pollinations-key"] = pollToken.trim();
     if (hfToken.trim()) h["x-hf-key"] = hfToken.trim();
+    if (gpuUrl.trim()) h["x-gpu-url"] = gpuUrl.trim();
     return h;
-  }, [token, pollToken, hfToken]);
+  }, [token, pollToken, hfToken, gpuUrl]);
 
   function persistToken() {
     persistSettings({
       replicateToken: token.trim(),
       pollinationsToken: pollToken.trim(),
       hfToken: hfToken.trim(),
+      gpuUrl: gpuUrl.trim(),
     });
     setShowKey(false);
     toast("Keys saved ✓");
@@ -911,6 +917,8 @@ export default function StudioPage() {
     // present, just unlocks the hf-inference fallback too.
     const params = new URLSearchParams({ prompt: trimmed });
     if (hfToken.trim()) params.set("hf", hfToken.trim());
+    // Your own GPU server (Colab) takes priority when configured.
+    if (gpuUrl.trim()) params.set("gpu", gpuUrl.trim());
     save({
       id: newId(),
       mode: "video",
@@ -1103,8 +1111,40 @@ export default function StudioPage() {
       {/* API key panel */}
       {showKey && (
         <div className="mb-4 space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          {/* Hugging Face token — free, most reliable images */}
+          {/* Your own GPU video server (free Colab notebook) */}
           <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
+              GPU server URL <span className="text-emerald-400">(free real AI video)</span>
+            </label>
+            <p className="mb-2 text-xs text-zinc-500">
+              Run the Colab notebook in <code className="text-zinc-400">colab/studio_video_colab.ipynb</code> (free T4
+              GPU), then paste the <code className="text-zinc-400">trycloudflare.com</code> URL it prints. Real AI
+              video, no payment. The URL changes each time you re-run Colab.
+            </p>
+            <div className="flex gap-2">
+              <input
+                value={gpuUrl}
+                onChange={(e) => setGpuUrl(e.target.value)}
+                placeholder="https://xxxx.trycloudflare.com"
+                className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+              />
+              {gpuUrl.trim() && (
+                <button
+                  onClick={() => {
+                    setGpuUrl("");
+                    persistSettings({ gpuUrl: "" });
+                    toast("GPU server cleared");
+                  }}
+                  className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-red-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Hugging Face token — free, most reliable images */}
+          <div className="border-t border-zinc-800 pt-3">
             <label className="mb-1 block text-xs font-medium text-zinc-300">
               Hugging Face token <span className="text-emerald-400">(free — most reliable images)</span>
             </label>

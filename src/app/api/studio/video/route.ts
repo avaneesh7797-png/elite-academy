@@ -189,6 +189,33 @@ export async function GET(req: NextRequest) {
 
   const deadline = Date.now() + 270_000;
 
+  // 0) YOUR OWN GPU server first (e.g. the Colab notebook in colab/). It runs a
+  // real video model, so when it's up it beats every other path here.
+  const gpu = (sp.get("gpu") || req.headers.get("x-gpu-url") || process.env.STUDIO_GPU_URL || "").trim();
+  if (gpu) {
+    const base = (gpu.startsWith("http") ? gpu : `https://${gpu}`).replace(/\/+$/, "");
+    const r = await fetchWithTimeout(
+      `${base}/generate?prompt=${encodeURIComponent(prompt)}`,
+      240_000,
+    );
+    if (r && r.ok) {
+      const ct = r.headers.get("content-type") || "";
+      if (ct.startsWith("video/") || ct.includes("octet-stream")) {
+        return new Response(await r.arrayBuffer(), {
+          status: 200,
+          headers: {
+            "Content-Type": ct.startsWith("video/") ? ct : "video/mp4",
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      }
+    }
+    return new Response(
+      "Couldn't reach your GPU server. Make sure the Colab notebook is still running and the URL is current (it changes each run).",
+      { status: 502 },
+    );
+  }
+
   // 1) Keyless Spaces — no token. YOUR configured Space(s) go first and get
   // more patience (wake retries + bigger budget); public ones are quick tries.
   const norm = (h: string) => (h.startsWith("http") ? h : `https://${h}`);
