@@ -121,6 +121,7 @@ export type StudioSettings = {
   replicateToken: string;
   pollinationsToken: string; // free token for unlimited images (auth.pollinations.ai)
   hfToken: string; // free Hugging Face token (huggingface.co/settings/tokens)
+  gpuUrl: string; // your own GPU video server (e.g. the Colab notebook's URL)
   name: string;
   email: string;
   accent: string;
@@ -130,6 +131,7 @@ const EMPTY_SETTINGS: StudioSettings = {
   replicateToken: "",
   pollinationsToken: "",
   hfToken: "",
+  gpuUrl: "",
   name: "",
   email: "",
   accent: "indigo",
