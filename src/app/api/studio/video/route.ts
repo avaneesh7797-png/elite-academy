@@ -244,7 +244,9 @@ export async function GET(req: NextRequest) {
   }
 
   return new Response(
-    "The free video models are busy or asleep right now (community GPUs queue up). Tap “Make it free with Motion” for a cinematic clip instantly, or try again in a bit.",
+    gpu
+      ? "Couldn’t reach your GPU server. Is the Colab notebook still running? Its URL changes every run — paste the new one in API key → GPU server URL."
+      : "No GPU server connected. Run the Colab notebook (colab/studio_video_colab.ipynb), copy the trycloudflare URL it prints, and paste it in API key → GPU server URL. Or tap “Make it free with Motion” for a cinematic clip right now.",
     { status: 502 },
   );
 }
